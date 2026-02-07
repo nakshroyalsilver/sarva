@@ -104,7 +104,7 @@ const Navbar = () => {
             {/* Logo */}
             <Link to="/" className="flex-shrink-0 flex items-center justify-center lg:justify-start">
               <h1 className="text-2xl md:text-4xl font-serif tracking-widest text-gray-900 font-medium hover:opacity-80 transition-opacity">
-                LUMIÈRE
+                Sarvaa
               </h1>
             </Link>
 
