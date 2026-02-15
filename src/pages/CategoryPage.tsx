@@ -1,318 +1,383 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Filter, ChevronDown, Heart, Star, SlidersHorizontal, X, ArrowUpDown } from "lucide-react";
-import { products } from "@/data/products"; // Ensure this path is correct
-import Navbar from "../components/layout/Navbar"; // Ensure this path is correct
-import Footer from "../components/layout/Footer"; // Ensure this path is correct
+import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag } from "lucide-react";
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
+import { products } from "@/data/products"; 
+import { useCart } from "@/context/CartContext"; 
 
-const CategoryPage = () => {
-  const { slug } = useParams();
-  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
-  const [sortOption, setSortOption] = useState("recommended");
+const ProductDetailPage = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { addToCart, toggleWishlist, wishlistItems } = useCart();
   
-  // Filter Logic
-  const categoryProducts = products.filter(
-    (p) => p.category === slug || slug === "all" || slug === "new-arrivals"
-  );
+  const [activeImage, setActiveImage] = useState(0);
+  const [quantity, setQuantity] = useState(1);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [pincode, setPincode] = useState("");
+  const [isPincodeChecked, setIsPincodeChecked] = useState(false);
+  const [isGiftWrapped, setIsGiftWrapped] = useState(false);
   
-  const displayProducts = categoryProducts.length < 4 
-    ? [...categoryProducts, ...categoryProducts] 
-    : categoryProducts;
+  // Feedback States
+  const [isAdded, setIsAdded] = useState(false);
+  const [sizeError, setSizeError] = useState(false);
+
+  const product = products.find((p) => p.id === id) || products[0];
+  const isWishlisted = wishlistItems.some((item) => item.id === product.id);
+
+  // MOCK DATA
+  const similarProducts = [...products, ...products].filter(p => p.category === product.category && p.id !== product.id).slice(0, 8);
+  const recentlyViewed = [...products, ...products].filter(p => p.id !== product.id).slice(0, 8);
+
+  const images = [
+    product.image,
+    "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=800&q=80", 
+    "https://images.unsplash.com/photo-1515562141589-67f0d569b03e?w=800&q=80", 
+    "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&q=80", 
+  ];
+
+  const handlePincodeCheck = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pincode.length === 6) setIsPincodeChecked(true);
+  };
+
+  const validateAndGetSize = () => {
+    if (product.category === 'rings' && !selectedSize) {
+      setSizeError(true);
+      return false;
+    }
+    setSizeError(false);
+    return true;
+  };
+
+  const handleAddToCart = () => {
+    if (!validateAndGetSize()) return;
+
+    for (let i = 0; i < quantity; i++) {
+      addToCart(product, selectedSize || "Standard");
+    }
+
+    setIsAdded(true);
+    setTimeout(() => setIsAdded(false), 2000);
+  };
+
+  // --- UPDATED BUY NOW LOGIC (Links to Checkout) ---
+  const handleBuyNow = () => {
+    if (!validateAndGetSize()) return;
+    
+    // 1. Add to cart (optional, depending on your flow)
+    // addToCart(product, selectedSize || "Standard");
+
+    // 2. Navigate to Checkout with the item data
+    navigate("/checkout", { 
+      state: { 
+        directPurchase: { ...product, qty: quantity, size: selectedSize || "Standard" } 
+      } 
+    });
+  };
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [slug]);
+    setActiveImage(0);
+  }, [id]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans">
-      {/* 1. Navbar Integration */}
+    <div className="bg-white min-h-screen flex flex-col font-sans text-gray-900">
       <Navbar />
 
-      <main className="flex-grow pt-4 pb-20">
+      <main className="flex-grow container mx-auto px-4 py-8 lg:py-10">
+        
         {/* Breadcrumbs */}
-        <div className="container mx-auto px-4 lg:px-6 mb-6">
-          <div className="text-[11px] text-gray-500 mb-6 uppercase tracking-widest font-medium">
-            <Link to="/" className="hover:text-rose-600 transition-colors">Home</Link> 
-            <span className="mx-2 text-gray-300">/</span> 
-            <span className="text-gray-900 capitalize font-semibold">{slug?.replace("-", " ")}</span>
-          </div>
-
-          {/* Banner / Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 pb-8">
-            <div>
-              <h1 className="font-serif text-3xl md:text-5xl text-gray-900 capitalize mb-3">
-                {slug === "new-arrivals" ? "New Arrivals" : slug}
-              </h1>
-              <p className="text-gray-500 text-sm max-w-2xl leading-relaxed font-light">
-                Discover our handcrafted {slug} collection. Each piece is made with 925 Sterling Silver, 
-                designed to catch the light and your heart.
-              </p>
-            </div>
-          </div>
+        <div className="text-xs text-gray-500 mb-6 uppercase tracking-widest flex items-center gap-2">
+          <Link to="/" className="hover:text-rose-600 transition-colors">Home</Link> 
+          <ChevronRight size={10} />
+          <Link to={`/category/${product.category}`} className="hover:text-rose-600 transition-colors capitalize">{product.category}</Link>
+          <ChevronRight size={10} />
+          <span className="text-gray-900 font-medium truncate max-w-[200px]">{product.name}</span>
         </div>
 
-        <div className="container mx-auto px-4 lg:px-6 flex gap-10 items-start relative mt-8">
+        <div className="flex flex-col lg:flex-row gap-10 relative items-start">
           
-          {/* 2. Sticky Sidebar Filters (Desktop) */}
-          <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-28 h-[calc(100vh-120px)] overflow-y-auto pr-4 custom-scrollbar">
-            <div className="space-y-8 pb-10">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold text-gray-900 uppercase tracking-widest text-xs">Filters</h3>
-                <button className="text-[10px] text-rose-600 underline cursor-pointer hover:text-rose-700">Clear All</button>
-              </div>
-
-              <FilterSection title="Price">
-                {["Under ₹1000", "₹1000 - ₹2500", "₹2500 - ₹5000", "Above ₹5000"].map((range) => (
-                  <label key={range} className="flex items-center gap-3 cursor-pointer group py-1">
-                    <div className="relative flex items-center">
-                      <input type="checkbox" className="peer appearance-none w-4 h-4 border border-gray-300 rounded-[3px] checked:bg-rose-500 checked:border-rose-500 transition-all" />
-                      <svg className="absolute w-3 h-3 text-white pointer-events-none opacity-0 peer-checked:opacity-100 left-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </div>
-                    <span className="text-sm text-gray-600 group-hover:text-rose-600 transition-colors">{range}</span>
-                  </label>
-                ))}
-              </FilterSection>
-
-              <div className="h-px bg-gray-100" />
-
-              <FilterSection title="Material">
-                {["925 Sterling Silver", "Rose Gold Plated", "Oxidized Silver", "Gold Plated"].map((mat) => (
-                  <label key={mat} className="flex items-center gap-3 cursor-pointer group py-1">
-                    <div className="relative flex items-center">
-                      <input type="checkbox" className="peer appearance-none w-4 h-4 border border-gray-300 rounded-[3px] checked:bg-rose-500 checked:border-rose-500 transition-all" />
-                      <svg className="absolute w-3 h-3 text-white pointer-events-none opacity-0 peer-checked:opacity-100 left-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </div>
-                    <span className="text-sm text-gray-600 group-hover:text-rose-600 transition-colors">{mat}</span>
-                  </label>
-                ))}
-              </FilterSection>
-
-              <div className="h-px bg-gray-100" />
+          {/* =================================================
+              LEFT COLUMN: STICKY IMAGES (SMALLER & COMPACT)
+             ================================================= */}
+          {/* Reduced width to 40% to make it smaller */}
+          <div className="lg:w-[40%] lg:sticky lg:top-24 lg:h-fit self-start">
+            <div className="flex flex-col gap-3">
               
-              <FilterSection title="Occasion">
-                {["Daily Wear", "Office Wear", "Party", "Wedding", "Gifting"].map((occ) => (
-                  <label key={occ} className="flex items-center gap-3 cursor-pointer group py-1">
-                    <div className="relative flex items-center">
-                      <input type="checkbox" className="peer appearance-none w-4 h-4 border border-gray-300 rounded-[3px] checked:bg-rose-500 checked:border-rose-500 transition-all" />
-                      <svg className="absolute w-3 h-3 text-white pointer-events-none opacity-0 peer-checked:opacity-100 left-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    </div>
-                    <span className="text-sm text-gray-600 group-hover:text-rose-600 transition-colors">{occ}</span>
-                  </label>
-                ))}
-              </FilterSection>
-            </div>
-          </aside>
-
-          {/* 3. Product Grid Area */}
-          <div className="flex-1">
-            
-            {/* Desktop Sort Bar */}
-            <div className="hidden lg:flex justify-between items-center mb-6">
-               <span className="text-sm text-gray-400">{displayProducts.length} Products Found</span>
-               <div className="flex items-center gap-3">
-                 <span className="text-sm text-gray-500">Sort by:</span>
-                 <div className="relative">
-                    <select 
-                      className="text-sm font-medium text-gray-900 bg-transparent border-none outline-none cursor-pointer hover:text-rose-600 transition-colors pr-4 py-1"
-                      value={sortOption}
-                      onChange={(e) => setSortOption(e.target.value)}
-                    >
-                      <option value="recommended">Recommended</option>
-                      <option value="newest">Newest First</option>
-                      <option value="price_low">Price: Low to High</option>
-                      <option value="price_high">Price: High to Low</option>
-                    </select>
+              {/* Main Image - Reduced aspect ratio to square (1:1) to save vertical space */}
+              <div className="flex-1 relative aspect-square bg-gray-50 rounded-xl overflow-hidden group border border-gray-100">
+                 <img 
+                   src={images[activeImage]} 
+                   alt={product.name} 
+                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 cursor-zoom-in" 
+                 />
+                 <button 
+                   onClick={() => toggleWishlist(product)}
+                   className="absolute top-4 right-4 p-2.5 bg-white/90 backdrop-blur rounded-full text-gray-500 hover:text-rose-600 transition-colors shadow-sm z-10"
+                 >
+                   <Heart size={18} className={isWishlisted ? "fill-rose-600 text-rose-600" : ""} />
+                 </button>
+                 
+                 <div className="absolute bottom-4 left-4 flex items-center gap-1 bg-white/90 backdrop-blur px-2 py-1 rounded text-xs font-bold text-gray-800 shadow-sm">
+                    <Star size={10} className="fill-amber-400 text-amber-400" />
+                    <span>{product.rating} | {product.reviews}</span>
                  </div>
-               </div>
+              </div>
+
+              {/* Thumbnails - Below & Compact */}
+              <div className="flex gap-2 overflow-x-auto lg:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] pb-1 lg:pb-0">
+                {images.map((img, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setActiveImage(idx)}
+                    // Smaller thumbnails (w-16 h-16) to ensure visibility above the fold
+                    className={`relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
+                      activeImage === idx ? "border-rose-500 ring-1 ring-rose-500" : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <img src={img} alt={`View ${idx}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+                 <button className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 border-gray-200 hover:border-gray-300 flex items-center justify-center bg-gray-50">
+                    <span className="text-[10px] text-gray-400 font-medium">Video</span>
+                 </button>
+              </div>
+
+            </div>
+          </div>
+
+          {/* =================================================
+              RIGHT COLUMN: CONTENT (60%)
+             ================================================= */}
+          {/* Increased width to 60% */}
+          <div className="lg:w-[60%] flex flex-col gap-8 pb-20">
+            
+            {/* 1. HEADER INFO */}
+            <div className="border-b border-gray-100 pb-6">
+              <h1 className="font-serif text-2xl md:text-3xl text-gray-900 mb-2">{product.name}</h1>
+              
+              <div className="flex items-end gap-3">
+                <span className="text-2xl font-medium text-gray-900">₹{product.price.toLocaleString()}</span>
+                {product.originalPrice && (
+                  <>
+                    <span className="text-lg text-gray-400 line-through mb-1">₹{product.originalPrice.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-green-600 mb-1.5">
+                       {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+                    </span>
+                  </>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1">Inclusive of all taxes</p>
             </div>
 
-            {/* THE GRID */}
-            {displayProducts.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-10 lg:gap-x-8 lg:gap-y-12">
-                {displayProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+            {/* 2. OFFERS */}
+            <div className="bg-rose-50/50 border border-dashed border-rose-200 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Tag size={16} className="text-rose-600" />
+                <span className="text-sm font-bold text-gray-900">Available Offers</span>
+              </div>
+              <ul className="text-xs text-gray-600 space-y-1.5 ml-6 list-disc marker:text-rose-400">
+                <li>Flat 10% off on your first order. Use Code: <strong>NEW10</strong></li>
+                <li>Get ₹500 off on orders above ₹2999.</li>
+                <li>Pay via UPI and get ₹50 cashback.</li>
+              </ul>
+            </div>
+
+            {/* 3. SIZE & QUANTITY */}
+            <div>
+              {product.category === 'rings' && (
+                <div className="mb-2">
+                  <div className="flex justify-between items-center mb-3">
+                     <span className={`text-sm font-bold uppercase tracking-wider ${sizeError ? "text-red-500" : ""}`}>Select Size</span>
+                     <button className="text-xs text-rose-600 underline">Size Guide</button>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    {['6', '7', '8', '9', '10'].map((size) => (
+                      <button
+                        key={size}
+                        onClick={() => { setSelectedSize(size); setSizeError(false); }}
+                        className={`w-12 h-12 rounded-full border flex items-center justify-center text-sm font-medium transition-all ${
+                          selectedSize === size 
+                            ? "border-rose-600 bg-rose-600 text-white" 
+                            : "border-gray-200 text-gray-600 hover:border-rose-300"
+                        }`}
+                      >
+                        {size}
+                      </button>
+                    ))}
+                  </div>
+                  {sizeError && <p className="text-xs text-red-500 mt-2 font-medium">Please select a size</p>}
+                </div>
+              )}
+
+              {/* 4. GIFT WRAP */}
+              <div 
+                className={`mb-6 border rounded-lg p-3 flex items-center justify-between cursor-pointer transition-colors ${isGiftWrapped ? "border-rose-200 bg-rose-50" : "border-gray-200 hover:border-rose-200"}`} 
+                onClick={() => setIsGiftWrapped(!isGiftWrapped)}
+              >
+                 <div className="flex items-center gap-3">
+                   <div className="bg-white p-2 rounded-full text-rose-500 shadow-sm border border-rose-100">
+                     <Gift size={20} />
+                   </div>
+                   <div>
+                     <p className="text-sm font-bold text-gray-900">Make it a Gift</p>
+                     <p className="text-[10px] text-gray-500">Premium wrap + Message card (₹50)</p>
+                   </div>
+                 </div>
+                 <div className={`w-5 h-5 border-2 rounded flex items-center justify-center ${isGiftWrapped ? "bg-rose-600 border-rose-600" : "border-gray-300"}`}>
+                   {isGiftWrapped && <Check size={12} className="text-white" />}
+                 </div>
+              </div>
+
+              {/* 5. ADD TO CART & BUY NOW BUTTONS */}
+              <div className="flex gap-3 h-12">
+                 {/* Quantity */}
+                 <div className="flex items-center border border-gray-300 rounded-lg w-24 justify-between px-2 shrink-0">
+                   <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-1 text-gray-500 hover:text-rose-600"><Minus size={16} /></button>
+                   <span className="text-sm font-medium">{quantity}</span>
+                   <button onClick={() => setQuantity(quantity + 1)} className="p-1 text-gray-500 hover:text-rose-600"><Plus size={16} /></button>
+                 </div>
+                 
+                 {/* Add to Cart */}
+                 <button 
+                   onClick={handleAddToCart}
+                   className={`flex-1 font-bold uppercase tracking-widest text-sm rounded-lg transition-all shadow-sm flex items-center justify-center gap-2 border ${
+                     isAdded 
+                       ? "bg-green-600 text-white border-green-600" 
+                       : "bg-white text-rose-600 border-rose-600 hover:bg-rose-50"
+                   }`}
+                 >
+                   {isAdded ? <>Added <Check size={18} /></> : <>Add to Cart <ShoppingBag size={18}/></>}
+                 </button>
+
+                 {/* Buy Now (Linked to Checkout) */}
+                 <button 
+                   onClick={handleBuyNow}
+                   className="flex-1 bg-rose-600 text-white font-bold uppercase tracking-widest text-sm rounded-lg hover:bg-rose-700 transition-all shadow-lg shadow-rose-200"
+                 >
+                   Buy Now
+                 </button>
+              </div>
+            </div>
+
+            {/* 6. DELIVERY CHECK */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+               <label className="text-xs font-bold uppercase tracking-wider mb-2 block">Check Delivery</label>
+               <form onSubmit={handlePincodeCheck} className="flex gap-2 relative">
+                 <input 
+                   type="text" maxLength={6} placeholder="Enter Pincode"
+                   value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                   className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-rose-500"
+                 />
+                 <button disabled={pincode.length !== 6} className="text-rose-600 text-xs font-bold px-4 hover:bg-rose-100 rounded disabled:text-gray-400">CHECK</button>
+               </form>
+               {isPincodeChecked && (
+                 <p className="mt-2 text-xs text-green-700 flex items-center gap-1"><Truck size={12} /> Delivery by <b>Wed, 14 Feb</b></p>
+               )}
+            </div>
+
+            {/* 7. DESCRIPTION ACCORDIONS */}
+            <div className="border-t border-gray-100 pt-2">
+               <AccordionItem title="Product Description">
+                 <p className="text-sm text-gray-500 leading-relaxed">Handcrafted with love, this {product.name} is made from 925 Sterling Silver. It features a brilliant rhodium finish for long-lasting shine.</p>
+               </AccordionItem>
+               <AccordionItem title="Material & Quality">
+                 <ul className="list-disc list-inside text-sm text-gray-500 space-y-1">
+                   <li>925 Sterling Silver (Hallmarked)</li>
+                   <li>Hypoallergenic & Nickel-free</li>
+                   <li>AAA+ Quality Zircons</li>
+                 </ul>
+               </AccordionItem>
+               <AccordionItem title="Shipping & Returns">
+                 <p className="text-sm text-gray-500">Free shipping on orders above ₹999. Easy 30-day returns.</p>
+               </AccordionItem>
+            </div>
+
+            {/* 8. CUSTOMER REVIEWS */}
+            <div className="border-t border-gray-100 pt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-serif text-lg text-gray-900">Reviews ({product.reviews})</h3>
+                <button className="text-xs font-bold text-rose-600 underline">View All</button>
+              </div>
+              <div className="space-y-4">
+                {[1, 2].map((i) => (
+                  <div key={i} className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-rose-100 rounded-full flex items-center justify-center text-[10px] font-bold text-rose-700">A</div>
+                        <span className="text-xs font-bold text-gray-900">Anjali S.</span>
+                      </div>
+                      <div className="flex"><Star size={10} className="fill-amber-400 text-amber-400" /><Star size={10} className="fill-amber-400 text-amber-400" /><Star size={10} className="fill-amber-400 text-amber-400" /><Star size={10} className="fill-amber-400 text-amber-400" /><Star size={10} className="fill-amber-400 text-amber-400" /></div>
+                    </div>
+                    <p className="text-xs text-gray-600 leading-relaxed">"Absolutely stunning! Looks even better in person. The packaging was so premium."</p>
+                  </div>
                 ))}
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-lg">
-                <p className="text-gray-500 mb-4">No products found in this category.</p>
-                <Link to="/" className="text-rose-600 font-medium hover:underline border border-rose-600 px-6 py-2 rounded-full hover:bg-rose-600 hover:text-white transition-all">Go back home</Link>
+            </div>
+
+            {/* 9. SIMILAR PRODUCTS (Medium Size Cards: 180px) */}
+            <div className="border-t border-gray-100 pt-6">
+              <h3 className="font-serif text-lg text-gray-900 mb-4">You May Also Like</h3>
+              <div className="flex gap-4 overflow-x-auto pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                {similarProducts.map((p, idx) => (
+                  <Link key={idx} to={`/product/${p.id}`} className="min-w-[180px] max-w-[180px] group block border border-gray-100 rounded-lg p-2 hover:shadow-md transition-shadow">
+                    <div className="relative aspect-square bg-gray-50 rounded mb-2 overflow-hidden">
+                      <img src={p.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    </div>
+                    <h4 className="text-xs font-medium text-gray-900 truncate">{p.name}</h4>
+                    <p className="text-xs font-bold text-gray-900">₹{p.price.toLocaleString()}</p>
+                  </Link>
+                ))}
               </div>
-            )}
+            </div>
+
+            {/* 10. RECENTLY VIEWED (Medium Size Cards: 180px) */}
+            <div className="border-t border-gray-100 pt-6">
+              <h3 className="font-serif text-lg text-gray-900 mb-4">Recently Viewed</h3>
+              <div className="flex gap-4 overflow-x-auto pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
+                {recentlyViewed.map((p, idx) => (
+                  <Link key={idx} to={`/product/${p.id}`} className="min-w-[180px] max-w-[180px] group block border border-gray-100 rounded-lg p-2 hover:shadow-md transition-shadow">
+                    <div className="relative aspect-square bg-gray-50 rounded mb-2 overflow-hidden">
+                      <img src={p.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    </div>
+                    <h4 className="text-xs font-medium text-gray-900 truncate">{p.name}</h4>
+                    <p className="text-xs font-bold text-gray-900">₹{p.price.toLocaleString()}</p>
+                  </Link>
+                ))}
+              </div>
+            </div>
 
           </div>
         </div>
       </main>
 
-      {/* 4. Footer Integration */}
       <Footer />
+    </div>
+  );
+};
 
-      {/* 5. Mobile Sticky Bottom Bar (Giva Style) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 flex shadow-[0_-4px_10px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]">
-        <button 
-          onClick={() => setIsMobileFilterOpen(true)}
-          className="flex-1 flex items-center justify-center gap-2 py-4 text-xs font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50 border-r border-gray-100"
-        >
-          <SlidersHorizontal size={16} /> Filters
-        </button>
-        <button 
-          className="flex-1 flex items-center justify-center gap-2 py-4 text-xs font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50"
-        >
-          <ArrowUpDown size={16} /> Sort
-        </button>
-      </div>
-
-      {/* 6. Mobile Filter Drawer */}
-      <AnimatePresence>
-        {isMobileFilterOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setIsMobileFilterOpen(false)}
-              className="fixed inset-0 bg-black/50 z-50 lg:hidden backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 right-0 w-[85%] max-w-sm bg-white z-[60] shadow-2xl overflow-y-auto lg:hidden"
-            >
-              <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
-                <h2 className="font-serif text-xl text-gray-900">Filters</h2>
-                <button onClick={() => setIsMobileFilterOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500"><X size={20} /></button>
-              </div>
-              <div className="p-6 space-y-8 pb-24">
-                 <FilterSection title="Price">
-                    {["Under ₹1000", "₹1000 - ₹2500", "Above ₹5000"].map((range) => (
-                      <label key={range} className="flex items-center gap-3 py-1">
-                        <input type="checkbox" className="w-5 h-5 rounded text-rose-500 focus:ring-rose-500" />
-                        <span className="text-gray-700">{range}</span>
-                      </label>
-                    ))}
-                 </FilterSection>
-                 <div className="h-px bg-gray-100" />
-                 <FilterSection title="Material">
-                    {["Silver", "Rose Gold", "Oxidized"].map((m) => (
-                      <label key={m} className="flex items-center gap-3 py-1">
-                        <input type="checkbox" className="w-5 h-5 rounded text-rose-500 focus:ring-rose-500" />
-                        <span className="text-gray-700">{m}</span>
-                      </label>
-                    ))}
-                 </FilterSection>
-              </div>
-              
-              {/* Drawer Bottom Action */}
-              <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-white safe-area-pb">
-                 <button 
-                  onClick={() => setIsMobileFilterOpen(false)}
-                  className="w-full bg-rose-600 text-white py-3.5 rounded-lg font-bold uppercase tracking-widest text-xs shadow-lg shadow-rose-200"
-                 >
-                   Show {displayProducts.length} Products
-                 </button>
-              </div>
-            </motion.div>
-          </>
+// Accordion Component
+const AccordionItem = ({ title, children }: { title: string, children: React.ReactNode }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <div className="border-b border-gray-100 last:border-none">
+      <button onClick={() => setIsOpen(!isOpen)} className="w-full flex justify-between items-center py-4 text-left font-medium text-sm text-gray-900 hover:text-rose-600 transition-colors">
+        {title}
+        <ChevronRight size={14} className={`transition-transform duration-300 ${isOpen ? "rotate-90" : ""}`} />
+      </button>
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div key="content" initial="collapsed" animate="open" exit="collapsed"
+            variants={{ open: { opacity: 1, height: "auto", marginBottom: 16 }, collapsed: { opacity: 0, height: 0, marginBottom: 0 } }}
+            transition={{ duration: 0.3 }} className="overflow-hidden">
+            <div className="text-xs text-gray-500 leading-relaxed">{children}</div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
 };
 
-// Helper for Sidebar Sections
-const FilterSection = ({ title, children }: { title: string, children: React.ReactNode }) => (
-  <div>
-    <h3 className="font-bold text-sm mb-4 text-gray-900 uppercase tracking-wider">{title}</h3>
-    <div className="space-y-2">{children}</div>
-  </div>
-);
-
-// ==========================================
-// 3. Updated Giva-Style Product Card
-// ==========================================
-const ProductCard = ({ product }: { product: any }) => {
-  return (
-    // FIX: WRAPPED IN LINK TO NAVIGATE TO PRODUCT PAGE
-    <Link to={`/product/${product.id}`} className="block">
-      <motion.div 
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        viewport={{ once: true }}
-        className="group relative cursor-pointer"
-      >
-        {/* Image Container */}
-        <div className="relative aspect-[3/4] bg-gray-50 rounded-lg overflow-hidden mb-3 border border-transparent group-hover:border-gray-100 transition-colors">
-          
-          {/* Badges */}
-          {product.badge && (
-            <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-1 uppercase tracking-wider z-10 rounded-sm shadow-sm ${
-              product.badge === 'Best Seller' ? 'bg-amber-100 text-amber-800' : 'bg-white text-rose-600'
-            }`}>
-              {product.badge}
-            </span>
-          )}
-
-          {/* Wishlist Button - Prevent default so it doesn't trigger Link navigation */}
-          <button 
-            onClick={(e) => {
-              e.preventDefault(); 
-              // Add Wishlist Logic Here
-            }}
-            className="absolute top-2 right-2 p-2 bg-white/90 rounded-full text-gray-400 hover:text-rose-500 hover:bg-white transition-all z-20 shadow-sm opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:translate-x-2 lg:group-hover:translate-x-0 duration-300"
-          >
-            <Heart size={16} />
-          </button>
-
-          {/* Main Image */}
-          <img 
-            src={product.image} 
-            alt={product.name} 
-            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
-          />
-          
-          {/* Quick View Overlay (Giva style) */}
-          <div className="absolute inset-x-0 bottom-0 p-3 lg:translate-y-full lg:group-hover:translate-y-0 transition-transform duration-300 z-20 flex flex-col gap-2">
-            <button 
-              onClick={(e) => {
-                e.preventDefault(); 
-                // Add Cart Logic Here
-              }}
-              className="w-full bg-white text-gray-900 text-xs font-bold uppercase py-2.5 rounded hover:bg-rose-600 hover:text-white transition-colors shadow-lg border border-gray-200"
-            >
-              Add to Cart
-            </button>
-          </div>
-        </div>
-
-        {/* Product Details */}
-        <div className="space-y-1.5 px-1">
-          <div className="flex items-center gap-1">
-            <div className="flex">
-              {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={10} className={`${i < Math.floor(product.rating) ? "fill-amber-400 text-amber-400" : "fill-gray-200 text-gray-200"}`} />
-              ))}
-            </div>
-            <span className="text-[10px] text-gray-400 font-medium ml-1">({product.reviews})</span>
-          </div>
-          
-          <h3 className="font-medium text-gray-900 text-sm group-hover:text-rose-600 transition-colors truncate">
-            {product.name}
-          </h3>
-          
-          <div className="flex items-baseline gap-2">
-            <span className="font-bold text-gray-900 text-sm">₹{product.price.toLocaleString()}</span>
-            {product.originalPrice && (
-              <>
-                <span className="text-gray-400 text-xs line-through">₹{product.originalPrice.toLocaleString()}</span>
-                <span className="text-[10px] text-green-600 font-bold bg-green-50 px-1 rounded">
-                  {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-      </motion.div>
-    </Link>
-  );
-};
-
-export default CategoryPage;
+export default ProductDetailPage;

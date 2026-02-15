@@ -2,45 +2,16 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Search, Heart, ShoppingBag, User, Menu, X, ChevronRight, ChevronDown, MapPin, XCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useCart } from "@/context/CartContext"; // 1. Import Hook
 
 // --- Data Structures ---
 const navCategories = [
-  { 
-    name: "New Arrivals", 
-    path: "/category/new", 
-    highlight: true, 
-    featuredImg: "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=400&q=80" 
-  },
-  { 
-    name: "Rings", 
-    path: "/category/rings", 
-    subCats: ["Solitaire Rings", "Couple Rings", "Cocktail Rings", "Promise Rings", "Band Rings"], 
-    featuredImg: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400&q=80" 
-  },
-  { 
-    name: "Earrings", 
-    path: "/category/earrings", 
-    subCats: ["Studs", "Jhumkas", "Hoops", "Danglers", "Ear Cuffs"], 
-    featuredImg: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=400&q=80" 
-  },
-  { 
-    name: "Necklaces", 
-    path: "/category/necklaces", 
-    subCats: ["Pendants", "Chains", "Chokers", "Lariat", "Mangalsutra"], 
-    featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80" 
-  },
-  { 
-    name: "Bracelets", 
-    path: "/category/bracelets", 
-    subCats: ["Chain", "Cuff", "Bangles", "Charm"], 
-    featuredImg: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&q=80" 
-  },
-  { 
-    name: "Gifts", 
-    path: "/category/gifts", 
-    highlight: true, 
-    featuredImg: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=400&q=80" 
-  },
+  { name: "New Arrivals", path: "/category/new", highlight: true, featuredImg: "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=400&q=80" },
+  { name: "Rings", path: "/category/rings", subCats: ["Solitaire Rings", "Couple Rings", "Cocktail Rings", "Promise Rings", "Band Rings"], featuredImg: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400&q=80" },
+  { name: "Earrings", path: "/category/earrings", subCats: ["Studs", "Jhumkas", "Hoops", "Danglers", "Ear Cuffs"], featuredImg: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=400&q=80" },
+  { name: "Necklaces", path: "/category/necklaces", subCats: ["Pendants", "Chains", "Chokers", "Lariat", "Mangalsutra"], featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80" },
+  { name: "Bracelets", path: "/category/bracelets", subCats: ["Chain", "Cuff", "Bangles", "Charm"], featuredImg: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&q=80" },
+  { name: "Gifts", path: "/category/gifts", highlight: true, featuredImg: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=400&q=80" },
 ];
 
 const searchPlaceholders = [
@@ -52,6 +23,9 @@ const searchPlaceholders = [
 ];
 
 const Navbar = () => {
+  // 2. Get Counts from Global Context
+  const { cartCount, wishlistCount } = useCart();
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -104,7 +78,7 @@ const Navbar = () => {
             {/* Logo */}
             <Link to="/" className="flex-shrink-0 flex items-center justify-center lg:justify-start">
               <h1 className="text-2xl md:text-4xl font-serif tracking-widest text-gray-900 font-medium hover:opacity-80 transition-opacity">
-                Sarvaa
+                LUMIÈRE
               </h1>
             </Link>
 
@@ -125,8 +99,6 @@ const Navbar = () => {
             {/* Animated Search Bar */}
             <div className="hidden lg:flex flex-1 max-w-2xl mx-4 relative">
                <div className="w-full h-12 bg-gray-50 rounded-full border border-gray-200 flex items-center overflow-hidden relative focus-within:ring-2 focus-within:ring-rose-100 focus-within:border-rose-300 focus-within:bg-white transition-all shadow-sm">
-                
-                {/* Animated Placeholder Text */}
                 <div className="absolute inset-0 flex items-center pl-5 pointer-events-none">
                   <AnimatePresence mode="wait">
                     {!searchQuery && (
@@ -143,7 +115,6 @@ const Navbar = () => {
                     )}
                   </AnimatePresence>
                 </div>
-
                 <input
                   type="text"
                   value={searchQuery}
@@ -151,7 +122,6 @@ const Navbar = () => {
                   className="w-full h-full pl-5 pr-12 bg-transparent text-gray-900 text-sm outline-none relative z-10 placeholder-transparent"
                   placeholder="" 
                 />
-
                 <button className="absolute right-1 w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center text-white hover:bg-rose-600 transition-all shadow-md z-20">
                   <Search size={18} />
                 </button>
@@ -168,22 +138,31 @@ const Navbar = () => {
                   </span>
                 </button>
                 
-                {/* Wishlist Link */}
+                {/* Wishlist Link with Dynamic Badge */}
                 <Link to="/wishlist" className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors group relative">
-                  <Heart size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300 group-hover:fill-rose-50" />
+                  <div className="relative">
+                    <Heart size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300 group-hover:fill-rose-50" />
+                    {wishlistCount > 0 && (
+                      <span className="absolute -top-1 -right-1.5 bg-rose-600 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
+                        {wishlistCount}
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] uppercase tracking-wider font-semibold mt-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-4 whitespace-nowrap text-rose-600">
                     Wishlist
                   </span>
                 </Link>
               </div>
 
-              {/* Cart Link */}
+              {/* Cart Link with Dynamic Badge */}
               <Link to="/cart" className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors relative group ml-2">
                 <div className="relative">
                   <ShoppingBag size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300" />
-                  <span className="absolute -top-1 -right-1.5 bg-rose-600 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
-                    2
-                  </span>
+                  {cartCount > 0 && (
+                    <span className="absolute -top-1 -right-1.5 bg-rose-600 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
+                      {cartCount}
+                    </span>
+                  )}
                 </div>
                 <span className="text-[10px] uppercase tracking-wider font-semibold mt-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-4 whitespace-nowrap text-rose-600">
                   Cart
@@ -193,7 +172,7 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* Desktop Navigation with Mega Menu */}
+        {/* Navigation & Mega Menu */}
         <nav 
           className="hidden lg:block border-t border-gray-100 relative bg-white z-10"
           onMouseLeave={() => setActiveCategory(null)}
@@ -222,7 +201,6 @@ const Navbar = () => {
             </ul>
           </div>
 
-          {/* Mega Menu Dropdown */}
           <AnimatePresence>
             {activeCategory && navCategories.find(c => c.name === activeCategory)?.subCats && (
               <motion.div
@@ -234,56 +212,30 @@ const Navbar = () => {
               >
                 <div className="container mx-auto px-12">
                   <div className="flex justify-center gap-24">
-                    
-                    {/* Column 1: Categories */}
                     <div className="w-56">
-                      <h3 className="text-xs font-extrabold text-rose-950 uppercase tracking-widest mb-6 border-b border-gray-100 pb-3">
-                        By Category
-                      </h3>
+                      <h3 className="text-xs font-extrabold text-rose-950 uppercase tracking-widest mb-6 border-b border-gray-100 pb-3">By Category</h3>
                       <ul className="space-y-4">
                         {navCategories.find(c => c.name === activeCategory)?.subCats?.map((sub) => (
-                          <li key={sub}>
-                            <Link to="#" className="text-sm text-gray-700 hover:text-rose-600 hover:translate-x-2 transition-all inline-block font-semibold">
-                              {sub}
-                            </Link>
-                          </li>
+                          <li key={sub}><Link to="#" className="text-sm text-gray-700 hover:text-rose-600 font-semibold">{sub}</Link></li>
                         ))}
                       </ul>
                     </div>
-
-                    {/* Column 2: Shop By Price */}
                     <div className="w-56">
-                      <h3 className="text-xs font-extrabold text-rose-950 uppercase tracking-widest mb-6 border-b border-gray-100 pb-3">
-                        By Price
-                      </h3>
+                      <h3 className="text-xs font-extrabold text-rose-950 uppercase tracking-widest mb-6 border-b border-gray-100 pb-3">By Price</h3>
                       <ul className="space-y-4">
                         {["Under ₹999", "₹1000 - ₹2999", "₹3000 - ₹4999", "Above ₹5000"].map((price) => (
-                          <li key={price}>
-                            <Link to="#" className="text-sm text-gray-700 hover:text-rose-600 hover:translate-x-2 transition-all inline-block font-semibold">
-                              {price}
-                            </Link>
-                          </li>
+                          <li key={price}><Link to="#" className="text-sm text-gray-700 hover:text-rose-600 font-semibold">{price}</Link></li>
                         ))}
                       </ul>
                     </div>
-
-                    {/* Column 3: Featured Image */}
                     <div className="w-72 h-52 rounded-xl overflow-hidden relative group cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-500">
-                      <img 
-                        src={navCategories.find(c => c.name === activeCategory)?.featuredImg} 
-                        alt="Featured" 
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                      />
+                      <img src={navCategories.find(c => c.name === activeCategory)?.featuredImg} alt="Featured" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent transition-colors" />
                       <div className="absolute bottom-5 left-5 text-white">
                         <p className="text-sm font-bold uppercase tracking-widest mb-1 drop-shadow-md">Best Seller</p>
-                        <div className="flex items-center gap-2 opacity-100 group-hover:translate-x-2 transition-all">
-                          <span className="text-xs font-medium">Shop Now</span>
-                          <ChevronRight size={14} />
-                        </div>
+                        <div className="flex items-center gap-2"><span className="text-xs font-medium">Shop Now</span><ChevronRight size={14} /></div>
                       </div>
                     </div>
-
                   </div>
                 </div>
               </motion.div>
@@ -291,13 +243,11 @@ const Navbar = () => {
           </AnimatePresence>
         </nav>
 
-        {/* Mobile Menu Overlay */}
+        {/* Mobile Menu & Location Modal */}
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.div
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
+              initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               className="lg:hidden fixed inset-0 top-[110px] bg-white z-50 overflow-y-auto pb-20 border-t border-gray-100"
             >
@@ -308,18 +258,11 @@ const Navbar = () => {
                     <span className="text-sm font-bold text-gray-900">{pincode ? `India ${pincode}` : "Select Location"}</span>
                   </div>
               </div>
-
               <div className="flex flex-col p-6 space-y-2">
                 {navCategories.map((cat) => (
                   <div key={cat.path} className="border-b border-gray-50 last:border-none">
-                    <Link
-                      to={cat.path}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-between py-4 text-gray-800 hover:text-rose-600 transition-colors"
-                    >
-                      <span className={`text-base tracking-wide font-medium ${cat.highlight ? "text-rose-600" : ""}`}>
-                        {cat.name}
-                      </span>
+                    <Link to={cat.path} onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-between py-4 text-gray-800 hover:text-rose-600 transition-colors">
+                      <span className={`text-base tracking-wide font-medium ${cat.highlight ? "text-rose-600" : ""}`}>{cat.name}</span>
                       <ChevronRight size={18} className="text-gray-300" />
                     </Link>
                   </div>
@@ -334,47 +277,18 @@ const Navbar = () => {
       <AnimatePresence>
         {isLocationModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setIsLocationModalOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-            
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="relative bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden"
-            >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsLocationModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
                 <h3 className="font-serif text-lg font-medium text-gray-900">Choose your location</h3>
-                <button onClick={() => setIsLocationModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                  <XCircle size={24} />
-                </button>
+                <button onClick={() => setIsLocationModalOpen(false)} className="text-gray-400 hover:text-gray-600"><XCircle size={24} /></button>
               </div>
-              
               <div className="p-6">
-                <p className="text-gray-500 text-sm mb-4">
-                  Select a delivery location to see product availability and delivery options.
-                </p>
+                <p className="text-gray-500 text-sm mb-4">Select a delivery location to see product availability.</p>
                 <form onSubmit={handleLocationUpdate}>
                   <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      placeholder="Enter Pincode" 
-                      maxLength={6}
-                      className="flex-1 border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500"
-                      value={tempPincode}
-                      onChange={(e) => setTempPincode(e.target.value.replace(/\D/g, ''))} // Only numbers
-                      autoFocus
-                    />
-                    <button 
-                      type="submit"
-                      disabled={tempPincode.length !== 6}
-                      className="bg-rose-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-rose-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Apply
-                    </button>
+                    <input type="text" placeholder="Enter Pincode" maxLength={6} className="flex-1 border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500" value={tempPincode} onChange={(e) => setTempPincode(e.target.value.replace(/\D/g, ''))} autoFocus />
+                    <button type="submit" disabled={tempPincode.length !== 6} className="bg-rose-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-rose-700 disabled:bg-gray-300 transition-colors">Apply</button>
                   </div>
                 </form>
               </div>

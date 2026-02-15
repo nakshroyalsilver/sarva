@@ -2,11 +2,17 @@ import { Link } from "react-router-dom";
 import { Trash2, ShoppingBag } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { products } from "@/data/products";
+import { useCart } from "@/context/CartContext"; // 1. Import Hook
 
 const WishlistPage = () => {
-  // Mock Wishlist Data (using first 4 products)
-  const wishlistItems = products.slice(0, 4);
+  // 2. Get Real Data from Global State
+  const { wishlistItems, toggleWishlist, addToCart } = useCart();
+
+  // 3. Helper to move item to cart and remove from wishlist
+  const handleMoveToCart = (item: any) => {
+    addToCart(item);
+    toggleWishlist(item);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
@@ -26,7 +32,11 @@ const WishlistPage = () => {
               <div key={item.id} className="group relative border border-gray-100 rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
                 
                 {/* Remove Button */}
-                <button className="absolute top-3 right-3 p-2 bg-white/90 rounded-full text-gray-400 hover:text-red-500 z-20 transition-colors">
+                <button 
+                  onClick={() => toggleWishlist(item)}
+                  className="absolute top-3 right-3 p-2 bg-white/90 rounded-full text-gray-400 hover:text-red-500 z-20 transition-colors"
+                  title="Remove from Wishlist"
+                >
                   <Trash2 size={16} />
                 </button>
 
@@ -54,7 +64,10 @@ const WishlistPage = () => {
                     )}
                   </div>
                   
-                  <button className="w-full bg-rose-600 text-white text-xs font-bold uppercase py-3 rounded hover:bg-rose-700 transition-colors flex items-center justify-center gap-2">
+                  <button 
+                    onClick={() => handleMoveToCart(item)}
+                    className="w-full bg-rose-600 text-white text-xs font-bold uppercase py-3 rounded hover:bg-rose-700 transition-colors flex items-center justify-center gap-2"
+                  >
                     <ShoppingBag size={14} /> Move to Cart
                   </button>
                 </div>
@@ -62,8 +75,12 @@ const WishlistPage = () => {
             ))}
           </div>
         ) : (
-          <div className="text-center py-20">
-             <h2 className="text-xl font-medium text-gray-900 mb-4">Your wishlist is empty</h2>
+          <div className="text-center py-20 bg-gray-50 rounded-lg">
+             <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm text-rose-300">
+                <Trash2 size={24} />
+             </div>
+             <h2 className="text-xl font-medium text-gray-900 mb-2">Your wishlist is empty</h2>
+             <p className="text-gray-500 text-sm mb-6">Save items you love here for later.</p>
              <Link to="/" className="inline-block bg-rose-600 text-white px-8 py-3 rounded-full text-sm font-bold uppercase tracking-widest hover:bg-rose-700 transition-colors">
                Start Shopping
              </Link>
