@@ -11,6 +11,7 @@ import WishlistPage from "./pages/WishlistPage";
 import CartPage from "./pages/CartPage";
 import { CartProvider } from "./context/CartContext";
 import CheckoutPage from "./pages/CheckoutPage";
+import LoginPage from "./pages/LoginPage";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -27,6 +28,8 @@ const App = () => (
           <Route path="/wishlist" element={<WishlistPage />} />
        <Route path="/cart" element={<CartPage />} />
        <Route path="/checkout" element={<CheckoutPage />} />
+      
+            <Route path="/login" element={<LoginPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -5,6 +5,7 @@ import CategoryShowcase from "@/components/home/CategoryShowcase";
 import FeaturedProducts from "@/components/home/FeaturedProducts";
 import NewArrivals from "@/components/home/NewArrivals";
 import TrustSection from "@/components/home/TrustSection";
+import GiftingSection from "@/components/home/GiftingSection";
 
 const Index = () => {
   return (
@@ -15,7 +16,8 @@ const Index = () => {
         <CategoryShowcase />
         <FeaturedProducts />
         <NewArrivals />
-        <TrustSection />
+        <GiftingSection/>
+        
       </main>
       <Footer />
     </div>

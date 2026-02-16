@@ -2,9 +2,8 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Search, Heart, ShoppingBag, User, Menu, X, ChevronRight, ChevronDown, MapPin, XCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useCart } from "@/context/CartContext"; // 1. Import Hook
+import { useCart } from "@/context/CartContext"; 
 
-// --- Data Structures ---
 const navCategories = [
   { name: "New Arrivals", path: "/category/new", highlight: true, featuredImg: "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=400&q=80" },
   { name: "Rings", path: "/category/rings", subCats: ["Solitaire Rings", "Couple Rings", "Cocktail Rings", "Promise Rings", "Band Rings"], featuredImg: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400&q=80" },
@@ -23,7 +22,6 @@ const searchPlaceholders = [
 ];
 
 const Navbar = () => {
-  // 2. Get Counts from Global Context
   const { cartCount, wishlistCount } = useCart();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -131,14 +129,19 @@ const Navbar = () => {
             {/* Right Icons */}
             <div className="flex items-center justify-end gap-2 md:gap-6 flex-1 lg:flex-none">
               <div className="hidden md:flex items-center gap-5">
-                 <button className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors group relative">
+                 
+                 {/* PROFILE LINK (Updated to /login) */}
+                 <Link 
+                   to="/login" 
+                   className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors group relative"
+                 >
                   <User size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300" />
                   <span className="text-[10px] uppercase tracking-wider font-semibold mt-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-4 whitespace-nowrap text-rose-600">
                     Profile
                   </span>
-                </button>
+                </Link>
                 
-                {/* Wishlist Link with Dynamic Badge */}
+                {/* Wishlist Link */}
                 <Link to="/wishlist" className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors group relative">
                   <div className="relative">
                     <Heart size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300 group-hover:fill-rose-50" />
@@ -154,7 +157,7 @@ const Navbar = () => {
                 </Link>
               </div>
 
-              {/* Cart Link with Dynamic Badge */}
+              {/* Cart Link */}
               <Link to="/cart" className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors relative group ml-2">
                 <div className="relative">
                   <ShoppingBag size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300" />
