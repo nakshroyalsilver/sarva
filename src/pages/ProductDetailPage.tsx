@@ -26,7 +26,7 @@ const ProductDetailPage = () => {
   const product = products.find((p) => p.id === id) || products[0];
   const isWishlisted = wishlistItems.some((item) => item.id === product.id);
 
-  // MOCK DATA for sliders
+  // MOCK DATA
   const similarProducts = [...products, ...products].filter(p => p.category === product.category && p.id !== product.id).slice(0, 8);
   const recentlyViewed = [...products, ...products].filter(p => p.id !== product.id).slice(0, 8);
 
@@ -45,13 +45,14 @@ const ProductDetailPage = () => {
   const validateAndGetSize = () => {
     if (product.category === 'rings' && !selectedSize) {
       setSizeError(true);
+      // Scroll to size selector on error
+      document.getElementById('size-selector')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
     }
     setSizeError(false);
     return true;
   };
 
-  // --- 1. ADD TO CART (Standard Behavior) ---
   const handleAddToCart = () => {
     if (!validateAndGetSize()) return;
 
@@ -63,17 +64,16 @@ const ProductDetailPage = () => {
     setTimeout(() => setIsAdded(false), 2000);
   };
 
-  // --- 2. BUY NOW (Adds to Cart -> Redirects to Checkout) ---
   const handleBuyNow = () => {
     if (!validateAndGetSize()) return;
     
-    // Add item(s) to global cart so it persists
-    for (let i = 0; i < quantity; i++) {
-      addToCart(product, selectedSize || "Standard");
-    }
-    
-    // Navigate to checkout page
-    navigate("/checkout");
+    // Add to cart and redirect
+    addToCart(product, selectedSize || "Standard");
+    navigate("/checkout", { 
+      state: { 
+        directPurchase: { ...product, qty: quantity, size: selectedSize || "Standard" } 
+      } 
+    });
   };
 
   useEffect(() => {
@@ -85,10 +85,10 @@ const ProductDetailPage = () => {
     <div className="bg-white min-h-screen flex flex-col font-sans text-gray-900">
       <Navbar />
 
-      <main className="flex-grow container mx-auto px-4 py-8 lg:py-10">
+      <main className="flex-grow container mx-auto px-4 py-6 lg:py-10">
         
-        {/* Breadcrumbs */}
-        <div className="text-xs text-gray-500 mb-6 uppercase tracking-widest flex items-center gap-2">
+        {/* Breadcrumbs (Hidden on Mobile for cleaner look) */}
+        <div className="hidden md:flex text-xs text-gray-500 mb-6 uppercase tracking-widest items-center gap-2">
           <Link to="/" className="hover:text-rose-600 transition-colors">Home</Link> 
           <ChevronRight size={10} />
           <Link to={`/category/${product.category}`} className="hover:text-rose-600 transition-colors capitalize">{product.category}</Link>
@@ -96,12 +96,12 @@ const ProductDetailPage = () => {
           <span className="text-gray-900 font-medium truncate max-w-[200px]">{product.name}</span>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-10 relative items-start">
+        <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 relative items-start">
           
           {/* =================================================
-              LEFT COLUMN: STICKY IMAGES (SMALLER: 40%)
+              LEFT COLUMN: IMAGES
              ================================================= */}
-          <div className="lg:w-[40%] lg:sticky lg:top-24 lg:h-fit self-start">
+          <div className="w-full lg:w-[40%] lg:sticky lg:top-24 lg:h-fit self-start">
             <div className="flex flex-col gap-3"> 
               
               {/* Main Image */}
@@ -124,13 +124,12 @@ const ProductDetailPage = () => {
                  </div>
               </div>
 
-              {/* Thumbnails - Below & Compact */}
+              {/* Thumbnails */}
               <div className="flex gap-2 overflow-x-auto lg:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] pb-2 lg:pb-0">
                 {images.map((img, idx) => (
                   <button
                     key={idx}
                     onClick={() => setActiveImage(idx)}
-                    // Smaller size: w-16 h-16 (64px)
                     className={`relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all ${
                       activeImage === idx ? "border-rose-500 ring-1 ring-rose-500" : "border-gray-200 hover:border-gray-300"
                     }`}
@@ -147,13 +146,14 @@ const ProductDetailPage = () => {
           </div>
 
           {/* =================================================
-              RIGHT COLUMN: CONTENT (60%)
+              RIGHT COLUMN: DETAILS
              ================================================= */}
-          <div className="lg:w-[60%] flex flex-col gap-8 pb-20">
+          {/* pb-24 on mobile prevents content from being hidden behind sticky bottom bar */}
+          <div className="w-full lg:w-[60%] flex flex-col gap-6 lg:gap-8 pb-24 lg:pb-0">
             
             {/* Header Info */}
             <div className="border-b border-gray-100 pb-6">
-              <h1 className="font-serif text-2xl md:text-3xl text-gray-900 mb-2">{product.name}</h1>
+              <h1 className="font-serif text-xl md:text-3xl text-gray-900 mb-2">{product.name}</h1>
               <div className="flex items-end gap-3">
                 <span className="text-2xl font-medium text-gray-900">₹{product.price.toLocaleString()}</span>
                 {product.originalPrice && (
@@ -181,7 +181,7 @@ const ProductDetailPage = () => {
             {/* Size & Gift */}
             <div>
               {product.category === 'rings' && (
-                <div className="mb-2">
+                <div className="mb-2" id="size-selector">
                   <div className="flex justify-between items-center mb-3">
                      <span className={`text-sm font-bold uppercase tracking-wider ${sizeError ? "text-red-500" : ""}`}>Select Size</span>
                      <button className="text-xs text-rose-600 underline">Size Guide</button>
@@ -191,11 +191,11 @@ const ProductDetailPage = () => {
                       <button key={size} onClick={() => { setSelectedSize(size); setSizeError(false); }} className={`w-12 h-12 rounded-full border flex items-center justify-center text-sm font-medium transition-all ${selectedSize === size ? "border-rose-600 bg-rose-600 text-white" : "border-gray-200 text-gray-600 hover:border-rose-300"}`}>{size}</button>
                     ))}
                   </div>
-                  {sizeError && <p className="text-xs text-red-500 mt-2 font-medium">Please select a size</p>}
+                  {sizeError && <p className="text-xs text-red-500 mt-2 font-medium animate-pulse">Please select a size to continue</p>}
                 </div>
               )}
 
-              <div className="mb-6 border rounded-lg p-3 flex items-center justify-between cursor-pointer transition-colors" onClick={() => setIsGiftWrapped(!isGiftWrapped)}>
+              <div className="mb-6 border rounded-lg p-3 flex items-center justify-between cursor-pointer transition-colors hover:border-rose-200" onClick={() => setIsGiftWrapped(!isGiftWrapped)}>
                  <div className="flex items-center gap-3">
                    <div className="bg-white p-2 rounded-full text-rose-500 shadow-sm border border-rose-100"><Gift size={20} /></div>
                    <div><p className="text-sm font-bold text-gray-900">Make it a Gift</p><p className="text-[10px] text-gray-500">Premium wrap + Message card (₹50)</p></div>
@@ -203,8 +203,8 @@ const ProductDetailPage = () => {
                  <div className={`w-5 h-5 border-2 rounded flex items-center justify-center ${isGiftWrapped ? "bg-rose-600 border-rose-600" : "border-gray-300"}`}>{isGiftWrapped && <Check size={12} className="text-white" />}</div>
               </div>
 
-              {/* ACTION BUTTONS */}
-              <div className="flex gap-3 h-12">
+              {/* DESKTOP ACTION BUTTONS (Hidden on Mobile) */}
+              <div className="hidden lg:flex gap-3 h-12">
                  <div className="flex items-center border border-gray-300 rounded-lg w-24 justify-between px-2 shrink-0">
                    <button onClick={() => setQuantity(Math.max(1, quantity - 1))} className="p-1 text-gray-500 hover:text-rose-600"><Minus size={16} /></button>
                    <span className="text-sm font-medium">{quantity}</span>
@@ -231,13 +231,12 @@ const ProductDetailPage = () => {
                {isPincodeChecked && <p className="mt-2 text-xs text-green-700 flex items-center gap-1"><Truck size={12} /> Delivery by <b>Wed, 14 Feb</b></p>}
             </div>
 
-            {/* Description */}
+            {/* Description & Reviews */}
             <div className="border-t border-gray-100 pt-2">
                <AccordionItem title="Product Description"><p className="text-sm text-gray-500 leading-relaxed">Handcrafted with love, this {product.name} is made from 925 Sterling Silver.</p></AccordionItem>
                <AccordionItem title="Shipping & Returns"><p className="text-sm text-gray-500">Free shipping on orders above ₹999. Easy 30-day returns.</p></AccordionItem>
             </div>
 
-            {/* Reviews */}
             <div className="border-t border-gray-100 pt-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-serif text-lg text-gray-900">Reviews ({product.reviews})</h3>
@@ -256,12 +255,12 @@ const ProductDetailPage = () => {
               </div>
             </div>
 
-            {/* Similar Products */}
+            {/* Recommendations */}
             <div className="border-t border-gray-100 pt-6">
               <h3 className="font-serif text-lg text-gray-900 mb-4">You May Also Like</h3>
               <div className="flex gap-4 overflow-x-auto pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                 {similarProducts.map((p, idx) => (
-                  <Link key={idx} to={`/product/${p.id}`} className="min-w-[180px] max-w-[180px] group block border border-gray-100 rounded-lg p-2 hover:shadow-md transition-shadow">
+                  <Link key={idx} to={`/product/${p.id}`} className="min-w-[160px] max-w-[160px] group block border border-gray-100 rounded-lg p-2 hover:shadow-md transition-shadow">
                     <div className="relative aspect-square bg-gray-50 rounded mb-2 overflow-hidden"><img src={p.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform" /></div>
                     <h4 className="text-xs font-medium text-gray-900 truncate">{p.name}</h4><p className="text-xs font-bold text-gray-900">₹{p.price.toLocaleString()}</p>
                   </Link>
@@ -269,12 +268,11 @@ const ProductDetailPage = () => {
               </div>
             </div>
 
-            {/* Recently Viewed */}
             <div className="border-t border-gray-100 pt-6">
               <h3 className="font-serif text-lg text-gray-900 mb-4">Recently Viewed</h3>
               <div className="flex gap-4 overflow-x-auto pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
                 {recentlyViewed.map((p, idx) => (
-                  <Link key={idx} to={`/product/${p.id}`} className="min-w-[180px] max-w-[180px] group block border border-gray-100 rounded-lg p-2 hover:shadow-md transition-shadow">
+                  <Link key={idx} to={`/product/${p.id}`} className="min-w-[160px] max-w-[160px] group block border border-gray-100 rounded-lg p-2 hover:shadow-md transition-shadow">
                     <div className="relative aspect-square bg-gray-50 rounded mb-2 overflow-hidden"><img src={p.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform" /></div>
                     <h4 className="text-xs font-medium text-gray-900 truncate">{p.name}</h4><p className="text-xs font-bold text-gray-900">₹{p.price.toLocaleString()}</p>
                   </Link>
@@ -286,11 +284,28 @@ const ProductDetailPage = () => {
         </div>
       </main>
 
+      {/* MOBILE STICKY BOTTOM BAR (Visible only on Mobile) */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white z-50 p-3 border-t border-gray-100 flex gap-3 lg:hidden shadow-[0_-4px_15px_rgba(0,0,0,0.05)] pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+         <button 
+           onClick={handleAddToCart} 
+           className={`flex-1 font-bold uppercase tracking-widest text-xs rounded-lg border py-3.5 transition-colors ${isAdded ? "bg-green-600 text-white border-green-600" : "bg-white text-rose-600 border-rose-200"}`}
+         >
+           {isAdded ? "Added" : "Add to Cart"}
+         </button>
+         <button 
+           onClick={handleBuyNow} 
+           className="flex-1 bg-rose-600 text-white font-bold uppercase tracking-widest text-xs rounded-lg shadow-lg shadow-rose-100 py-3.5"
+         >
+           Buy Now
+         </button>
+      </div>
+
       <Footer />
     </div>
   );
 };
 
+// Accordion Component
 const AccordionItem = ({ title, children }: { title: string, children: React.ReactNode }) => {
   const [isOpen, setIsOpen] = useState(false);
   return (
