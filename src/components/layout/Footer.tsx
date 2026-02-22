@@ -34,9 +34,9 @@ const FAQSection = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <div className="bg-[#FDFBF9] py-12 border-t border-rose-50">
+    <div className="bg-[#FDFBF9] py-8 border-t border-rose-50">
       <div className="container mx-auto px-4 max-w-3xl">
-        <div className="text-center mb-10">
+        <div className="text-center mb-6">
           <h3 className="font-serif text-2xl md:text-3xl text-gray-900 mb-2">Frequently Asked Questions</h3>
           <p className="text-sm text-gray-500">Got questions? We've got answers.</p>
         </div>
@@ -90,9 +90,9 @@ const Footer = () => {
       <FAQSection />
 
       {/* 2. ASSURANCE / SERVICE PROMISE */}
-      <div className="bg-rose-950 text-white py-8">
+      <div className="bg-rose-950 text-white py-6">
         <div className="container mx-auto px-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-4 text-center divide-x divide-white/10">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-4 text-center divide-x divide-white/10">
             <div className="flex flex-col items-center gap-3 group px-2">
               <Truck size={28} strokeWidth={1.5} className="opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
               <div>
@@ -126,8 +126,8 @@ const Footer = () => {
       </div>
 
       {/* 3. MAIN FOOTER LINKS */}
-      <div className="container mx-auto px-4 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8">
+      <div className="container mx-auto px-4 py-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-6">
           
           {/* Brand Column */}
           <div className="space-y-6">
@@ -203,8 +203,8 @@ const Footer = () => {
       </div>
 
       {/* 4. BOTTOM BAR */}
-      <div className="border-t border-gray-100 py-6">
-        <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-4">
+      <div className="border-t border-gray-100 py-4">
+        <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-3">
           <p className="text-[11px] text-gray-400 font-medium">
             © 2026 Sarvaa Jewelry. Designed with <span className="text-rose-500">♥</span> in India.
           </p>

@@ -13,36 +13,36 @@ const NewArrivals = () => {
   };
 
   return (
-    <section className="py-16 md:py-20">
-      <div className="container mx-auto px-4">
-        <div className="flex items-end justify-between mb-10">
+    <section className="py-8 md:py-12 bg-white">
+      <div className="container mx-auto px-6">
+        <div className="flex items-end justify-between mb-6">
           <div>
-            <p className="text-xs tracking-[0.3em] text-muted-foreground uppercase mb-2">Just Dropped</p>
-            <h2 className="font-serif text-3xl md:text-4xl text-foreground tracking-wide">
+            <p className="text-[10px] tracking-[0.25em] text-gray-500 uppercase mb-1.5">Just Dropped</p>
+            <h2 className="font-serif text-2xl md:text-3xl text-gray-900 tracking-wide">
               New Arrivals
             </h2>
           </div>
           <div className="hidden md:flex gap-2">
             <button
               onClick={() => scroll(-1)}
-              className="p-2 border border-border rounded-full hover:bg-secondary transition-colors text-foreground"
+              className="p-1.5 border border-gray-300 rounded-full hover:bg-gray-100 transition-colors text-gray-700"
               aria-label="Scroll left"
             >
-              <ChevronLeft size={18} />
+              <ChevronLeft size={16} />
             </button>
             <button
               onClick={() => scroll(1)}
-              className="p-2 border border-border rounded-full hover:bg-secondary transition-colors text-foreground"
+              className="p-1.5 border border-gray-300 rounded-full hover:bg-gray-100 transition-colors text-gray-700"
               aria-label="Scroll right"
             >
-              <ChevronRight size={18} />
+              <ChevronRight size={16} />
             </button>
           </div>
         </div>
 
         <div
           ref={scrollRef}
-          className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide pb-4 snap-x snap-mandatory"
+          className="flex gap-4 md:gap-5 overflow-x-auto scrollbar-hide pb-4 snap-x snap-mandatory"
           style={{ scrollbarWidth: "none" }}
         >
           {newArrivals.map((product) => (
