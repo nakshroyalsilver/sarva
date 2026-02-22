@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 import { supabase } from "../../../supabase"; // Adjust the path if needed
+import { categories as staticCategories } from "@/data/products"; // Import static data as fallback
 
 interface LiveCategory {
   id: string;
@@ -19,6 +20,18 @@ const CategoryShowcase = () => {
   useEffect(() => {
     async function fetchLiveCategories() {
       try {
+        // Check if Supabase is configured
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+          // Use static data if Supabase is not configured
+          console.info("Supabase not configured, using static data");
+          setCategories(staticCategories.slice(0, 3)); // Show first 3 categories
+          setLoading(false);
+          return;
+        }
+
         // 1. Fetch specifically your 3 main categories and their products from the database
         const { data, error } = await supabase
           .from('categories')
@@ -41,7 +54,7 @@ const CategoryShowcase = () => {
             // --- CUSTOM CATEGORY IMAGE LOGIC ---
             if (cat.slug === 'necklace') {
               coverImage = "https://evsasggscybkayavrxmw.supabase.co/storage/v1/object/public/product-images/necklace/0.36013557480999037.jpeg";
-            } 
+            }
             else if (cat.slug === 'earring') {
               coverImage = cat.products.length > 0 ? cat.products[0].image_url : "https://evsasggscybkayavrxmw.supabase.co/storage/v1/object/public/product-images/earring/earring2.jpg";
             }
@@ -68,7 +81,9 @@ const CategoryShowcase = () => {
           setCategories(formattedCategories);
         }
       } catch (error) {
-        console.error("Error fetching categories:", error);
+        console.error("Error fetching categories, using static data:", error);
+        // Fallback to static data on error
+        setCategories(staticCategories.slice(0, 3));
       } finally {
         setLoading(false); // Turn off the skeleton loader once data arrives
       }
@@ -78,23 +93,23 @@ const CategoryShowcase = () => {
   }, []);
 
   return (
-    <section className="py-12 md:py-24 bg-white">
-      <div className="container mx-auto px-4">
-        
-        {/* --- SECTION HEADER --- */}
-        <div className="text-center mb-10 md:mb-14">
-          <motion.span 
+    <section className="py-8 md:py-12 bg-white">
+      <div className="container mx-auto px-6">
+
+        {/* --- SECTION HEADER - Compact --- */}
+        <div className="text-center mb-6 md:mb-8">
+          <motion.span
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
-            className="text-xs font-bold tracking-[0.3em] text-rose-500 uppercase mb-3 block"
+            className="text-[10px] font-bold tracking-[0.25em] text-rose-500 uppercase mb-2 block"
           >
             Collections
           </motion.span>
-          <motion.h2 
+          <motion.h2
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="font-serif text-3xl md:text-5xl text-gray-900 tracking-wide"
+            className="font-serif text-2xl md:text-4xl text-gray-900 tracking-wide"
           >
             Shop by Category
           </motion.h2>
@@ -139,9 +154,8 @@ const CategoryShowcase = () => {
               ))}
             </div>
 
-            {/* --- DESKTOP VIEW: 3-Column Grid --- */}
-            {/* Note: 'items-start' is added here to lock all images perfectly to the top line */}
-            <div className="hidden md:grid grid-cols-3 gap-8 lg:gap-12 max-w-5xl mx-auto items-start">
+            {/* --- DESKTOP VIEW: 3-Column Grid - Compact --- */}
+            <div className="hidden md:grid grid-cols-3 gap-6 lg:gap-8 max-w-6xl mx-auto items-start">
               {categories.map((cat, i) => (
                 <motion.div
                   key={cat.id}

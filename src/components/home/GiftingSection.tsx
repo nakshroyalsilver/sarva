@@ -35,29 +35,29 @@ const giftCollections = [
 
 const GiftingSection = () => {
   return (
-    <section className="py-16 bg-gradient-to-b from-white to-rose-50/30">
-      <div className="container mx-auto px-4">
-        
-        {/* Section Header */}
-        <div className="text-center mb-12">
-          <span className="text-rose-600 font-bold text-xs uppercase tracking-[0.2em] mb-2 block">
+    <section className="py-8 md:py-12 bg-gradient-to-b from-white to-rose-50/30">
+      <div className="container mx-auto px-6">
+
+        {/* Section Header - Compact */}
+        <div className="text-center mb-6">
+          <span className="text-rose-600 font-bold text-[10px] uppercase tracking-[0.25em] mb-1.5 block">
             The Gifting Studio
           </span>
-          <h2 className="font-serif text-3xl md:text-4xl text-gray-900 mb-3">
+          <h2 className="font-serif text-2xl md:text-3xl text-gray-900 mb-2">
             Find the Perfect Gift
           </h2>
-          <p className="text-gray-500 text-sm max-w-md mx-auto">
+          <p className="text-gray-500 text-xs max-w-md mx-auto">
             Celebrate your loved ones with something as precious as they are.
           </p>
         </div>
 
-        {/* Grid Layout */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+        {/* Grid Layout - Compact */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           {giftCollections.map((item, idx) => (
-            <Link 
-              key={idx} 
-              to={item.link} 
-              className="group relative h-[300px] md:h-[400px] rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-500"
+            <Link
+              key={idx}
+              to={item.link}
+              className="group relative h-[250px] md:h-[320px] rounded-lg overflow-hidden cursor-pointer shadow-sm hover:shadow-lg transition-all duration-500"
             >
               {/* Background Image with Zoom Effect */}
               <img 

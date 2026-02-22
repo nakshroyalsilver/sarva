@@ -54,149 +54,139 @@ const Navbar = () => {
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm font-sans">
-        
-        {/* Top Announcement Bar */}
-        <div className="bg-gradient-to-r from-rose-50 via-[#FFF0F5] to-rose-50 text-rose-950 text-center text-[10px] md:text-xs py-2 tracking-widest font-medium border-b border-rose-100">
+      <header className="sticky top-0 z-40 bg-white border-b border-gray-200 font-sans">
+
+        {/* Top Announcement Bar - Compact */}
+        <div className="bg-gradient-to-r from-rose-50 via-[#FFF0F5] to-rose-50 text-rose-950 text-center text-[10px] py-1.5 tracking-wider font-medium border-b border-rose-100">
           FLAT 10% OFF ON YOUR FIRST ORDER | USE CODE: <span className="font-bold">NEW10</span>
         </div>
 
-        {/* Main Header Row */}
-        <div className="container mx-auto px-4 md:px-6 relative z-20 bg-white">
-          <div className="flex items-center justify-between h-24 gap-6">
-            
-            {/* Mobile Toggle */}
-            <div className="flex items-center gap-4 lg:hidden flex-1">
-              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-gray-800 p-1 hover:bg-gray-100 rounded-full transition-colors">
-                {mobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
-              </button>
-              <Search size={24} className="text-gray-600" />
-            </div>
-
-            {/* Logo */}
-            <Link to="/" className="flex-shrink-0 flex items-center justify-center lg:justify-start">
-              <h1 className="text-2xl md:text-4xl font-serif tracking-widest text-gray-900 font-medium hover:opacity-80 transition-opacity">
-                Sarvaa
-              </h1>
-            </Link>
-
-            {/* Deliver To Box */}
-            <button 
-              onClick={() => setIsLocationModalOpen(true)}
-              className="hidden lg:flex flex-col justify-center items-start leading-tight cursor-pointer hover:bg-gray-100 px-3 py-2 rounded-md transition-colors group min-w-[140px] border border-transparent hover:border-gray-200"
-            >
-              <span className="text-[11px] text-gray-500 ml-5 group-hover:text-rose-600">Deliver to</span>
-              <div className="flex items-center gap-1.5">
-                <MapPin size={18} className="text-gray-900 group-hover:text-rose-600" />
-                <span className="text-sm font-bold text-gray-900 group-hover:text-rose-600">
-                  {pincode ? `India ${pincode}` : "Select Location"}
-                </span>
-              </div>
+        {/* Main Header Row - Compact Tanishq-style */}
+        <div className="container mx-auto px-6 relative z-20 bg-white">
+          {/* Mobile Header */}
+          <div className="flex lg:hidden items-center justify-between h-14">
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-gray-800 p-1">
+              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
+            <Link to="/" className="absolute left-1/2 transform -translate-x-1/2">
+              <h1 className="text-xl font-serif tracking-widest text-gray-900">Sarvaa</h1>
+            </Link>
+            <div className="flex items-center gap-2">
+              <Link to="/wishlist"><Heart size={20} /></Link>
+              <Link to="/cart" className="relative">
+                <ShoppingBag size={20} />
+                {cartCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center">{cartCount}</span>
+                )}
+              </Link>
+            </div>
+          </div>
 
-            {/* Animated Search Bar */}
-            <div className="hidden lg:flex flex-1 max-w-2xl mx-4 relative">
-               <div className="w-full h-12 bg-gray-50 rounded-full border border-gray-200 flex items-center overflow-hidden relative focus-within:ring-2 focus-within:ring-rose-100 focus-within:border-rose-300 focus-within:bg-white transition-all shadow-sm">
-                <div className="absolute inset-0 flex items-center pl-5 pointer-events-none">
-                  <AnimatePresence mode="wait">
-                    {!searchQuery && (
-                      <motion.span
-                        key={searchPlaceholders[placeholderIndex]}
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: -20, opacity: 0 }}
-                        transition={{ duration: 0.6, ease: "easeInOut" }}
-                        className="text-gray-400 text-sm font-medium"
-                      >
-                        {searchPlaceholders[placeholderIndex]}
-                      </motion.span>
-                    )}
-                  </AnimatePresence>
-                </div>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full h-full pl-5 pr-12 bg-transparent text-gray-900 text-sm outline-none relative z-10 placeholder-transparent"
-                  placeholder="" 
-                />
-                <button className="absolute right-1 w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center text-white hover:bg-rose-600 transition-all shadow-md z-20">
-                  <Search size={18} />
-                </button>
-               </div>
+          {/* Desktop Header - Compact Three Column */}
+          <div className="hidden lg:flex items-center h-16 gap-6">
+            {/* Left: Logo */}
+            <div className="w-32">
+              <Link to="/" className="inline-block">
+                <h1 className="text-2xl font-serif tracking-[0.3em] text-gray-900 font-medium hover:opacity-80 transition-opacity">
+                  Sarvaa
+                </h1>
+              </Link>
             </div>
 
-            {/* Right Icons */}
-            <div className="flex items-center justify-end gap-2 md:gap-6 flex-1 lg:flex-none">
-              <div className="hidden md:flex items-center gap-5">
-                 
-                 {/* PROFILE LINK (Updated to /login) */}
-                 <Link 
-                   to="/login" 
-                   className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors group relative"
-                 >
-                  <User size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300" />
-                  <span className="text-[10px] uppercase tracking-wider font-semibold mt-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-4 whitespace-nowrap text-rose-600">
-                    Profile
-                  </span>
-                </Link>
-                
-                {/* Wishlist Link */}
-                <Link to="/wishlist" className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors group relative">
-                  <div className="relative">
-                    <Heart size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300 group-hover:fill-rose-50" />
-                    {wishlistCount > 0 && (
-                      <span className="absolute -top-1 -right-1.5 bg-rose-600 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
-                        {wishlistCount}
-                      </span>
-                    )}
+            {/* Center: Search Bar - Tanishq Style */}
+            <div className="flex-1 flex justify-center">
+              <div className="w-full max-w-lg">
+                <div className="w-full h-10 bg-gray-50 rounded-full border border-gray-300 flex items-center overflow-hidden relative focus-within:border-rose-500 transition-all">
+                  <div className="absolute inset-0 flex items-center pl-4 pointer-events-none">
+                    <AnimatePresence mode="wait">
+                      {!searchQuery && (
+                        <motion.span
+                          key={searchPlaceholders[placeholderIndex]}
+                          initial={{ y: 20, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          exit={{ y: -20, opacity: 0 }}
+                          transition={{ duration: 0.6, ease: "easeInOut" }}
+                          className="text-gray-400 text-sm"
+                        >
+                          {searchPlaceholders[placeholderIndex]}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
                   </div>
-                  <span className="text-[10px] uppercase tracking-wider font-semibold mt-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-4 whitespace-nowrap text-rose-600">
-                    Wishlist
-                  </span>
-                </Link>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full h-full pl-4 pr-11 bg-transparent text-gray-900 text-sm outline-none relative z-10 placeholder-transparent"
+                    placeholder=""
+                  />
+                  <button className="absolute right-0.5 w-9 h-9 bg-rose-500 rounded-full flex items-center justify-center text-white hover:bg-rose-600 transition-all">
+                    <Search size={15} />
+                  </button>
+                </div>
               </div>
+            </div>
 
-              {/* Cart Link */}
-              <Link to="/cart" className="flex flex-col items-center justify-center text-gray-700 hover:text-rose-600 transition-colors relative group ml-2">
-                <div className="relative">
-                  <ShoppingBag size={28} strokeWidth={1.5} className="group-hover:scale-110 transition-transform duration-300" />
+            {/* Right: Pincode + Icons - Compact */}
+            <div className="w-32 flex items-center justify-end gap-4">
+              <button
+                onClick={() => setIsLocationModalOpen(true)}
+                className="flex items-center gap-1 hover:text-rose-600 transition-colors group"
+              >
+                <MapPin size={14} className="text-gray-600 group-hover:text-rose-600" />
+                <span className="text-xs font-semibold text-gray-700 group-hover:text-rose-600">{pincode}</span>
+              </button>
+
+              <div className="flex items-center gap-3.5">
+                 
+                <Link to="/login" className="text-gray-700 hover:text-rose-600 transition-colors">
+                  <User size={20} strokeWidth={1.8} />
+                </Link>
+
+                <Link to="/wishlist" className="text-gray-700 hover:text-rose-600 transition-colors relative">
+                  <Heart size={20} strokeWidth={1.8} />
+                  {wishlistCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">
+                      {wishlistCount}
+                    </span>
+                  )}
+                </Link>
+
+                <Link to="/cart" className="text-gray-700 hover:text-rose-600 transition-colors relative">
+                  <ShoppingBag size={20} strokeWidth={1.8} />
                   {cartCount > 0 && (
-                    <span className="absolute -top-1 -right-1.5 bg-rose-600 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold border-2 border-white shadow-sm">
+                    <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">
                       {cartCount}
                     </span>
                   )}
-                </div>
-                <span className="text-[10px] uppercase tracking-wider font-semibold mt-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-4 whitespace-nowrap text-rose-600">
-                  Cart
-                </span>
-              </Link>
+                </Link>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Navigation & Mega Menu */}
-        <nav 
-          className="hidden lg:block border-t border-gray-100 relative bg-white z-10"
+        {/* Navigation & Mega Menu - Compact */}
+        <nav
+          className="hidden lg:block border-t border-gray-200 relative bg-white z-10"
           onMouseLeave={() => setActiveCategory(null)}
         >
-          <div className="container mx-auto px-4 flex items-center justify-center h-14">
-            <ul className="flex items-center gap-10">
+          <div className="container mx-auto px-6 flex items-center justify-center h-11">
+            <ul className="flex items-center gap-8">
               {navCategories.map((cat) => (
-                <li 
-                  key={cat.path} 
-                  className="h-14 flex items-center"
+                <li
+                  key={cat.path}
+                  className="h-11 flex items-center"
                   onMouseEnter={() => setActiveCategory(cat.name)}
                 >
                   <Link
                     to={cat.path}
-                    className={`text-[13px] uppercase tracking-[0.15em] font-bold transition-all duration-300 hover:text-rose-600 relative py-4 flex items-center gap-1 group
+                    className={`text-[11px] uppercase tracking-wider font-bold transition-all duration-200 hover:text-rose-600 relative py-3 flex items-center gap-0.5 group
                       ${cat.highlight ? "text-rose-600" : "text-gray-700"}`}
                   >
                     {cat.name}
-                    <span className="absolute bottom-0 left-0 w-0 h-[3px] bg-rose-500 group-hover:w-full transition-all duration-300 ease-out rounded-full" />
+                    <span className="absolute bottom-0 left-0 w-0 h-[2px] bg-rose-500 group-hover:w-full transition-all duration-200 ease-out" />
                     {cat.subCats && (
-                      <ChevronDown size={12} className={`transition-transform duration-300 text-gray-400 group-hover:text-rose-600 ${activeCategory === cat.name ? "rotate-180" : ""}`} />
+                      <ChevronDown size={11} className={`transition-transform duration-200 text-gray-400 group-hover:text-rose-600 ${activeCategory === cat.name ? "rotate-180" : ""}`} />
                     )}
                   </Link>
                 </li>

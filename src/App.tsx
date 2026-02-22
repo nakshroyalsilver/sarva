@@ -12,6 +12,7 @@ import CartPage from "./pages/CartPage";
 import { CartProvider } from "./context/CartContext";
 import CheckoutPage from "./pages/CheckoutPage";
 import LoginPage from "./pages/LoginPage";
+import SearchResultsPage from "./pages/SearchResultsPage";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -25,11 +26,11 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/category/:slug" element={<CategoryPage />} />
           <Route path="/product/:id" element={<ProductDetailPage />} />
+          <Route path="/search" element={<SearchResultsPage />} />
           <Route path="/wishlist" element={<WishlistPage />} />
-       <Route path="/cart" element={<CartPage />} />
-       <Route path="/checkout" element={<CheckoutPage />} />
-      
-            <Route path="/login" element={<LoginPage />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/login" element={<LoginPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
