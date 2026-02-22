@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm install:*)",
+      "Bash(curl:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)",
+      "WebFetch(domain:www.tanishq.co.in)",
+      "Bash(git init:*)",
+      "Bash(git remote:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
