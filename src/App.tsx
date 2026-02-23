@@ -12,7 +12,9 @@ import CartPage from "./pages/CartPage";
 import { CartProvider } from "./context/CartContext";
 import CheckoutPage from "./pages/CheckoutPage";
 import LoginPage from "./pages/LoginPage";
-import SearchResultsPage from "./pages/SearchResultsPage";
+import CorporatePage from "./pages/CorporatePage";
+
+import SearchPage from "./pages/SearchPage";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -23,14 +25,17 @@ const App = () => (
       <BrowserRouter>
       <CartProvider>
         <Routes>
+          <Route path="/corporate" element={<CorporatePage />} />
           <Route path="/" element={<Index />} />
           <Route path="/category/:slug" element={<CategoryPage />} />
           <Route path="/product/:id" element={<ProductDetailPage />} />
-          <Route path="/search" element={<SearchResultsPage />} />
+          
           <Route path="/wishlist" element={<WishlistPage />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

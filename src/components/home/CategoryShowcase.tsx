@@ -25,14 +25,13 @@ const CategoryShowcase = () => {
         const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
         if (!supabaseUrl || !supabaseKey) {
-          // Use static data if Supabase is not configured
           console.info("Supabase not configured, using static data");
-          setCategories(staticCategories.slice(0, 3)); // Show first 3 categories
+          setCategories(staticCategories.slice(0, 3) as unknown as LiveCategory[]);
           setLoading(false);
           return;
         }
 
-        // 1. Fetch specifically your 3 main categories and their products from the database
+        // 1. Fetch categories (Checking for BOTH singular and plural slugs)
         const { data, error } = await supabase
           .from('categories')
           .select(`
@@ -41,24 +40,26 @@ const CategoryShowcase = () => {
             slug,
             products ( image_url )
           `)
-          .in('slug', ['earring', 'necklace', 'bracelet']) // Target your 3 specific folders
+          .in('slug', ['earring', 'earrings', 'necklace', 'necklaces', 'bracelet', 'bracelets']) 
           .order('name', { ascending: true });
 
         if (error) throw error;
 
-        if (data) {
+        console.log("Supabase Categories Data:", data); // Helpful for debugging!
+
+        if (data && data.length > 0) {
           // 2. Format the data and assign the correct cover images
-          const formattedCategories = data.map((cat: any) => {
+          const formattedCategories: LiveCategory[] = data.map((cat: any) => {
             let coverImage = "";
 
             // --- CUSTOM CATEGORY IMAGE LOGIC ---
-            if (cat.slug === 'necklace') {
+            if (cat.slug === 'necklace' || cat.slug === 'necklaces') {
               coverImage = "https://evsasggscybkayavrxmw.supabase.co/storage/v1/object/public/product-images/necklace/0.36013557480999037.jpeg";
             }
-            else if (cat.slug === 'earring') {
+            else if (cat.slug === 'earring' || cat.slug === 'earrings') {
               coverImage = cat.products.length > 0 ? cat.products[0].image_url : "https://evsasggscybkayavrxmw.supabase.co/storage/v1/object/public/product-images/earring/earring2.jpg";
             }
-            else if (cat.slug === 'bracelet') {
+            else if (cat.slug === 'bracelet' || cat.slug === 'bracelets') {
               coverImage = cat.products.length > 0 ? cat.products[0].image_url : "https://evsasggscybkayavrxmw.supabase.co/storage/v1/object/public/product-images/bracelet/bracelet1.jpg";
             }
             else if (cat.products.length > 0 && cat.products[0].image_url) {
@@ -78,12 +79,17 @@ const CategoryShowcase = () => {
             };
           });
 
-          setCategories(formattedCategories);
+          // Show maximum of 3 categories on the homepage
+          setCategories(formattedCategories.slice(0, 3));
+        } else {
+          // Fallback if Supabase connects but finds 0 matching categories
+          console.warn("Supabase returned empty array, falling back to static data.");
+          setCategories(staticCategories.slice(0, 3) as unknown as LiveCategory[]);
         }
       } catch (error) {
         console.error("Error fetching categories, using static data:", error);
-        // Fallback to static data on error
-        setCategories(staticCategories.slice(0, 3));
+        // Fallback to static data on actual error
+        setCategories(staticCategories.slice(0, 3) as unknown as LiveCategory[]);
       } finally {
         setLoading(false); // Turn off the skeleton loader once data arrives
       }

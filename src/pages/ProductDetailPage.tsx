@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag } from "lucide-react";
+import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag, PlayCircle } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { products as localProducts } from "@/data/products"; 
@@ -13,6 +13,8 @@ const ProductDetailPage = () => {
   const navigate = useNavigate();
   const { addToCart, toggleWishlist, wishlistItems } = useCart();
   
+  const topRef = useRef<HTMLDivElement>(null);
+
   const [dbProduct, setDbProduct] = useState<any>(null);
   const [dbSimilar, setDbSimilar] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,11 @@ const ProductDetailPage = () => {
   const [isAdded, setIsAdded] = useState(false);
   const [sizeError, setSizeError] = useState(false);
 
+  // Zoom state logic
+  const [isZooming, setIsZooming] = useState(false);
+  const [zoomStyle, setZoomStyle] = useState({});
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     async function fetchProductDetails() {
       setLoading(true);
@@ -38,7 +45,7 @@ const ProductDetailPage = () => {
             ...prodData,
             name: prodData.title,
             image: prodData.image_url,
-            price: prodData.price || 0, // <--- CHANGED: Using custom saved price!
+            price: prodData.price || 0,
             category: prodData.categories?.slug || 'uncategorized',
             rating: 4.8, 
             reviews: 124 
@@ -51,7 +58,7 @@ const ProductDetailPage = () => {
               ...p,
               name: p.title,
               image: p.image_url,
-              price: p.price || 0, // <--- CHANGED: Using custom saved price!
+              price: p.price || 0,
               category: p.categories?.slug || 'uncategorized'
             })));
           }
@@ -72,13 +79,13 @@ const ProductDetailPage = () => {
   const product = dbProduct || localProduct || localProducts[0];
   const isWishlisted = wishlistItems.some((item) => item.id === product.id);
   const similarProducts = dbSimilar.length > 0 ? dbSimilar : [...localProducts, ...localProducts].filter(p => p.category === product.category && p.id !== product.id).slice(0, 8);
-  const recentlyViewed = [...localProducts, ...localProducts].filter(p => p.id !== product.id).slice(0, 8);
 
+  // Duplicated product image 4 times
   const images = [
     product.image,
-    "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=800&q=80", 
-    "https://images.unsplash.com/photo-1515562141589-67f0d569b03e?w=800&q=80", 
-    "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&q=80", 
+    product.image,
+    product.image,
+    product.image,
   ];
 
   const handlePincodeCheck = (e: React.FormEvent) => {
@@ -113,6 +120,19 @@ const ProductDetailPage = () => {
     });
   };
 
+  // Zoom event handler
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!imageContainerRef.current) return;
+    const { left, top, width, height } = imageContainerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+
+    setZoomStyle({
+      transformOrigin: `${x}% ${y}%`,
+      transform: 'scale(2.5)'
+    });
+  };
+
   if (loading) {
     return (
       <div className="bg-white min-h-screen flex flex-col font-sans">
@@ -142,41 +162,56 @@ const ProductDetailPage = () => {
         </div>
 
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 relative items-start">
-          <div className="w-full lg:w-[40%] lg:sticky lg:top-24 lg:h-fit self-start">
+          
+          {/* CHANGED: Reduced column width to lg:w-[38%] so the square image is shorter, bringing thumbnails up */}
+          <div className="w-full lg:w-[38%] xl:w-[35%] lg:sticky lg:top-24 lg:h-fit self-start">
             <div className="flex flex-col gap-3"> 
-              <div className="flex-1 relative aspect-square bg-gray-50 rounded-xl overflow-hidden group border border-gray-100">
+              {/* Main Image */}
+              <div 
+                ref={imageContainerRef}
+                onMouseEnter={() => setIsZooming(true)}
+                onMouseLeave={() => setIsZooming(false)}
+                onMouseMove={handleMouseMove}
+                className="flex-1 relative aspect-square bg-gray-50 rounded-xl overflow-hidden group border border-gray-100 cursor-crosshair"
+              >
                  <img 
                    src={images[activeImage]} 
                    alt={product.name} 
-                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 cursor-zoom-in" 
+                   style={isZooming ? zoomStyle : { transform: 'scale(1)' }}
+                   className="w-full h-full object-cover transition-transform duration-200 ease-out" 
                  />
                  <button 
-                   onClick={() => toggleWishlist(product)}
-                   className="absolute top-4 right-4 p-2.5 bg-white/90 backdrop-blur rounded-full text-gray-500 hover:text-rose-600 transition-colors shadow-sm z-10 cursor-pointer"
+                   onClick={(e) => { e.stopPropagation(); toggleWishlist(product); }}
+                   className={`absolute top-4 right-4 p-2.5 bg-white/90 backdrop-blur rounded-full transition-colors shadow-sm z-10 cursor-pointer ${isZooming ? 'opacity-0' : 'opacity-100'} text-gray-500 hover:text-rose-600`}
                  >
                    <Heart size={18} className={isWishlisted ? "fill-rose-600 text-rose-600" : ""} />
                  </button>
                  
-                 <div className="absolute bottom-4 left-4 flex items-center gap-1 bg-white/90 backdrop-blur px-2 py-1 rounded text-xs font-bold text-gray-800 shadow-sm">
+                 <div className={`absolute bottom-4 left-4 flex items-center gap-1 bg-white/90 backdrop-blur px-2 py-1 rounded text-xs font-bold text-gray-800 shadow-sm transition-opacity ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
                     <Star size={10} className="fill-amber-400 text-amber-400" />
                     <span>{product.rating} | {product.reviews}</span>
                  </div>
               </div>
 
+              {/* Thumbnails Row */}
               <div className="flex gap-2 overflow-x-auto lg:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] pb-2 lg:pb-0">
                 {images.map((img, idx) => (
                   <button
                     key={idx}
                     onClick={() => setActiveImage(idx)}
+                    // CHANGED: Reduced thumbnail size slightly to md:w-16 md:h-16 to save vertical space
                     className={`relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                      activeImage === idx ? "border-rose-500 ring-1 ring-rose-500" : "border-gray-200 hover:border-gray-300"
+                      activeImage === idx ? "border-rose-500 ring-1 ring-rose-500" : "border-transparent hover:border-gray-300"
                     }`}
                   >
                     <img src={img} alt={`View ${idx}`} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/5 hover:bg-transparent transition-colors"></div>
                   </button>
                 ))}
-                 <button className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 border-gray-200 hover:border-gray-300 flex items-center justify-center bg-gray-50 cursor-pointer">
-                    <span className="text-[10px] text-gray-400 font-medium">Video</span>
+                 
+                 <button className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 border-gray-200 hover:border-gray-300 flex flex-col items-center justify-center bg-gray-50 cursor-pointer group transition-all">
+                    <PlayCircle size={20} strokeWidth={1.5} className="text-gray-400 mb-1 group-hover:text-rose-500 transition-colors" />
+                    <span className="text-[9px] uppercase tracking-widest text-gray-500 font-bold group-hover:text-rose-500 transition-colors">Video</span>
                  </button>
               </div>
             </div>
@@ -186,7 +221,6 @@ const ProductDetailPage = () => {
             <div className="border-b border-gray-100 pb-6">
               <h1 className="font-serif text-xl md:text-3xl text-gray-900 mb-2">{product.name}</h1>
               <div className="flex items-end gap-3">
-                {/* Formatting exactly to standard currency */}
                 <span className="text-2xl font-medium text-gray-900">₹{product.price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                 {product.originalPrice && (
                   <>
