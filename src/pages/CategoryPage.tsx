@@ -30,9 +30,19 @@ const CategoryPage = () => {
           }
         } else {
           setCategoryName(slug === 'new-arrivals' ? 'New Arrivals' : 'All Collections');
-          if (slug === 'new-arrivals') {
-            query = query.order('created_at', { ascending: false }).limit(20);
-          }
+        }
+
+        // --- APPLIED SORTING LOGIC ---
+        if (slug === 'new-arrivals') {
+          query = query.order('created_at', { ascending: false }).limit(20);
+        } else if (sortOption === "newest") {
+          query = query.order("created_at", { ascending: false });
+        } else if (sortOption === "price_low") {
+          query = query.order("price", { ascending: true });
+        } else if (sortOption === "price_high") {
+          query = query.order("price", { ascending: false });
+        } else {
+          query = query.order('created_at', { ascending: false }); // Default for 'recommended'
         }
 
         const { data: prodData, error } = await query;
@@ -43,8 +53,9 @@ const CategoryPage = () => {
             return {
               ...p,
               name: p.title, 
-              image: p.image_url,
-              price: p.price || 0, // <--- CHANGED: Now using your custom saved price!
+              // --- CHANGED: Supports new multiple images array, fallback to old single image ---
+              image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
+              price: p.price || 0, 
               category: p.categories?.name || 'Uncategorized'
             };
           });
@@ -60,7 +71,7 @@ const CategoryPage = () => {
 
     fetchLiveCatalog();
     window.scrollTo(0, 0);
-  }, [slug]);
+  }, [slug, sortOption]); // <-- Added sortOption to dependency array so it refetches when sort changes
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
@@ -169,12 +180,23 @@ const CategoryPage = () => {
           <SlidersHorizontal size={18} className="text-gray-600" /> 
           Filters
         </button>
-        <button 
-          className="flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50"
-        >
-          <ArrowUpDown size={18} className="text-gray-600" /> 
-          Sort
-        </button>
+        <div className="flex-1 relative flex flex-col items-center justify-center">
+           {/* MOBILE SORT DROPDOWN OVERLAY */}
+           <select 
+             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+             value={sortOption}
+             onChange={(e) => setSortOption(e.target.value)}
+           >
+             <option value="recommended">Recommended</option>
+             <option value="newest">Newest First</option>
+             <option value="price_low">Price: Low to High</option>
+             <option value="price_high">Price: High to Low</option>
+           </select>
+           <div className="flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50 pointer-events-none">
+             <ArrowUpDown size={18} className="text-gray-600" /> 
+             Sort
+           </div>
+        </div>
       </div>
 
       <AnimatePresence>

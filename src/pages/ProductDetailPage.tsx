@@ -19,7 +19,8 @@ const ProductDetailPage = () => {
   const [dbSimilar, setDbSimilar] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeImage, setActiveImage] = useState(0);
+  // CHANGED: -1 means Video is active. 0, 1, 2, 3 means Image is active.
+  const [activeImage, setActiveImage] = useState(0); 
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [pincode, setPincode] = useState("");
@@ -44,7 +45,8 @@ const ProductDetailPage = () => {
           const formattedProduct = {
             ...prodData,
             name: prodData.title,
-            image: prodData.image_url,
+            // CHANGED: Prioritize the new array, fallback to the old single URL
+            image: (prodData.image_urls && prodData.image_urls.length > 0) ? prodData.image_urls[0] : prodData.image_url,
             price: prodData.price || 0,
             category: prodData.categories?.slug || 'uncategorized',
             rating: 4.8, 
@@ -57,7 +59,7 @@ const ProductDetailPage = () => {
             setDbSimilar(simData.map(p => ({
               ...p,
               name: p.title,
-              image: p.image_url,
+              image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
               price: p.price || 0,
               category: p.categories?.slug || 'uncategorized'
             })));
@@ -80,13 +82,10 @@ const ProductDetailPage = () => {
   const isWishlisted = wishlistItems.some((item) => item.id === product.id);
   const similarProducts = dbSimilar.length > 0 ? dbSimilar : [...localProducts, ...localProducts].filter(p => p.category === product.category && p.id !== product.id).slice(0, 8);
 
-  // Duplicated product image 4 times
-  const images = [
-    product.image,
-    product.image,
-    product.image,
-    product.image,
-  ];
+  // CHANGED: Construct the images array safely using the new fields or fallback to local
+  const images = (product.image_urls && product.image_urls.length > 0)
+    ? product.image_urls
+    : (product.image ? [product.image] : []);
 
   const handlePincodeCheck = (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,7 +121,7 @@ const ProductDetailPage = () => {
 
   // Zoom event handler
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!imageContainerRef.current) return;
+    if (!imageContainerRef.current || activeImage === -1) return; // Prevent zooming on video
     const { left, top, width, height } = imageContainerRef.current.getBoundingClientRect();
     const x = ((e.clientX - left) / width) * 100;
     const y = ((e.clientY - top) / height) * 100;
@@ -163,23 +162,35 @@ const ProductDetailPage = () => {
 
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-12 relative items-start">
           
-          {/* CHANGED: Reduced column width to lg:w-[38%] so the square image is shorter, bringing thumbnails up */}
           <div className="w-full lg:w-[38%] xl:w-[35%] lg:sticky lg:top-24 lg:h-fit self-start">
             <div className="flex flex-col gap-3"> 
-              {/* Main Image */}
+              {/* Main Image / Video Container */}
               <div 
                 ref={imageContainerRef}
-                onMouseEnter={() => setIsZooming(true)}
+                onMouseEnter={() => activeImage !== -1 && setIsZooming(true)}
                 onMouseLeave={() => setIsZooming(false)}
                 onMouseMove={handleMouseMove}
-                className="flex-1 relative aspect-square bg-gray-50 rounded-xl overflow-hidden group border border-gray-100 cursor-crosshair"
+                className={`flex-1 relative aspect-square bg-gray-50 rounded-xl overflow-hidden group border border-gray-100 ${activeImage !== -1 ? 'cursor-crosshair' : ''}`}
               >
-                 <img 
-                   src={images[activeImage]} 
-                   alt={product.name} 
-                   style={isZooming ? zoomStyle : { transform: 'scale(1)' }}
-                   className="w-full h-full object-cover transition-transform duration-200 ease-out" 
-                 />
+                 {/* CHANGED: Render video if activeImage is -1, otherwise render the image */}
+                 {activeImage === -1 && product.video_url ? (
+                   <video 
+                     src={product.video_url} 
+                     controls 
+                     autoPlay 
+                     muted 
+                     loop 
+                     className="w-full h-full object-cover"
+                   />
+                 ) : (
+                   <img 
+                     src={images[activeImage] || 'https://via.placeholder.com/800'} 
+                     alt={product.name} 
+                     style={isZooming ? zoomStyle : { transform: 'scale(1)' }}
+                     className="w-full h-full object-cover transition-transform duration-200 ease-out" 
+                   />
+                 )}
+
                  <button 
                    onClick={(e) => { e.stopPropagation(); toggleWishlist(product); }}
                    className={`absolute top-4 right-4 p-2.5 bg-white/90 backdrop-blur rounded-full transition-colors shadow-sm z-10 cursor-pointer ${isZooming ? 'opacity-0' : 'opacity-100'} text-gray-500 hover:text-rose-600`}
@@ -195,11 +206,10 @@ const ProductDetailPage = () => {
 
               {/* Thumbnails Row */}
               <div className="flex gap-2 overflow-x-auto lg:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] pb-2 lg:pb-0">
-                {images.map((img, idx) => (
+                {images.map((img: string, idx: number) => (
                   <button
                     key={idx}
                     onClick={() => setActiveImage(idx)}
-                    // CHANGED: Reduced thumbnail size slightly to md:w-16 md:h-16 to save vertical space
                     className={`relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
                       activeImage === idx ? "border-rose-500 ring-1 ring-rose-500" : "border-transparent hover:border-gray-300"
                     }`}
@@ -209,17 +219,37 @@ const ProductDetailPage = () => {
                   </button>
                 ))}
                  
-                 <button className="relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 border-gray-200 hover:border-gray-300 flex flex-col items-center justify-center bg-gray-50 cursor-pointer group transition-all">
-                    <PlayCircle size={20} strokeWidth={1.5} className="text-gray-400 mb-1 group-hover:text-rose-500 transition-colors" />
-                    <span className="text-[9px] uppercase tracking-widest text-gray-500 font-bold group-hover:text-rose-500 transition-colors">Video</span>
-                 </button>
+                 {/* CHANGED: Add Video Thumbnail if video_url exists */}
+                 {product.video_url && (
+                   <button 
+                     onClick={() => setActiveImage(-1)}
+                     className={`relative w-16 h-16 flex-shrink-0 rounded-lg overflow-hidden border-2 flex flex-col items-center justify-center bg-gray-50 cursor-pointer group transition-all ${
+                       activeImage === -1 ? "border-rose-500 ring-1 ring-rose-500" : "border-gray-200 hover:border-gray-300"
+                     }`}
+                   >
+                      <PlayCircle size={20} strokeWidth={1.5} className={`${activeImage === -1 ? "text-rose-500" : "text-gray-400"} mb-1 group-hover:text-rose-500 transition-colors`} />
+                      <span className={`text-[9px] uppercase tracking-widest font-bold transition-colors ${activeImage === -1 ? "text-rose-500" : "text-gray-500 group-hover:text-rose-500"}`}>Video</span>
+                   </button>
+                 )}
               </div>
             </div>
           </div>
 
           <div className="w-full lg:w-[60%] flex flex-col gap-6 lg:gap-8 pb-24 lg:pb-0">
             <div className="border-b border-gray-100 pb-6">
+              {/* CHANGED: Show Type if available */}
+              {product.type && (
+                <span className="text-rose-600 font-bold text-[10px] uppercase tracking-widest mb-2 block">
+                  {product.type}
+                </span>
+              )}
               <h1 className="font-serif text-xl md:text-3xl text-gray-900 mb-2">{product.name}</h1>
+              
+              {/* CHANGED: Show Short Description if available */}
+              {product.short_description && (
+                <p className="text-sm text-gray-500 mb-4">{product.short_description}</p>
+              )}
+
               <div className="flex items-end gap-3">
                 <span className="text-2xl font-medium text-gray-900">₹{product.price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                 {product.originalPrice && (
@@ -290,15 +320,25 @@ const ProductDetailPage = () => {
                  <input type="text" maxLength={6} placeholder="Enter Pincode" value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))} className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-rose-500" />
                  <button disabled={pincode.length !== 6} className="text-rose-600 text-xs font-bold px-4 hover:bg-rose-100 rounded disabled:text-gray-400 cursor-pointer">CHECK</button>
                </form>
-               {isPincodeChecked && <p className="mt-2 text-xs text-green-700 flex items-center gap-1"><Truck size={12} /> Delivery by <b>Wed, 14 Feb</b></p>}
+               {isPincodeChecked && <p className="mt-2 text-xs text-green-700 flex items-center gap-1"><Truck size={12} /> Delivery by <b>Tomorrow</b></p>}
             </div>
 
             <div className="border-t border-gray-100 pt-2">
+               {/* CHANGED: Dynamic Description & Specifications */}
                <AccordionItem title="Product Description">
                  <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">
-                   {product.description || `Handcrafted with love, this ${product.name} is made from 925 Sterling Silver.`}
+                   {product.detail_description || product.description || `Handcrafted with love, this ${product.name} is made from 925 Sterling Silver.`}
                  </p>
                </AccordionItem>
+               {(product.weight_in_grams || product.making_charge) && (
+                 <AccordionItem title="Product Specifications">
+                   <ul className="text-sm text-gray-500 space-y-2">
+                     {product.weight_in_grams && <li><strong>Weight:</strong> {product.weight_in_grams} grams</li>}
+                     {product.making_charge && <li><strong>Making Charges:</strong> ₹{product.making_charge}</li>}
+                     <li><strong>Material:</strong> 925 Sterling Silver</li>
+                   </ul>
+                 </AccordionItem>
+               )}
                <AccordionItem title="Shipping & Returns"><p className="text-sm text-gray-500">Free shipping on orders above ₹999. Easy 30-day returns.</p></AccordionItem>
             </div>
 

@@ -15,13 +15,11 @@ const navCategories = [
   { name: "Necklaces", path: "/category/necklaces", subCats: ["Pendants", "Chains", "Chokers", "Lariat", "Mangalsutra"], featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80" },
   { name: "Bracelets", path: "/category/bracelets", subCats: ["Chain", "Cuff", "Bangles", "Charm"], featuredImg: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&q=80" },
   { name: "Gifts", path: "/category/gifts", highlight: true, featuredImg: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=400&q=80" },
-  // FIX 1: Updated path here
   { name: "Corporate", path: "/corporate", featuredImg: "https://images.unsplash.com/photo-1556761175-5973dc0f32b7?w=400&q=80" },
 ];
 
 const searchPlaceholders = ["Search for Rings", "Search for Diamonds", "Search for Necklaces", "Search for 925 Silver"];
 
-// --- SMART SEARCH LIVE DATA ---
 const popularSearches = ["Diamond Rings", "Gold Chains", "Bridal Sets", "Platinum Bands", "Mangalsutra", "Stud Earrings", "Chokers", "Couple Rings"];
 const categoryLinks = [
   { name: "Rings", path: "/category/rings" },
@@ -29,7 +27,6 @@ const categoryLinks = [
   { name: "Necklaces", path: "/category/necklaces" },
   { name: "Bracelets", path: "/category/bracelets" },
   { name: "Gifts", path: "/category/gifts" },
-  // FIX 2: Updated path here
   { name: "Corporate", path: "/corporate" }
 ];
 const mockProducts = [
@@ -47,10 +44,20 @@ const Navbar = () => {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
 
-  // Location
+  // --- CHANGED: Location Logic to sync with PincodeModal ---
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
-  const [pincode, setPincode] = useState("700001");
+  const [pincode, setPincode] = useState(localStorage.getItem("user_pincode") || "Select Location");
   const [tempPincode, setTempPincode] = useState("");
+
+  useEffect(() => {
+    const handlePincodeUpdate = () => {
+      const savedPin = localStorage.getItem("user_pincode");
+      if (savedPin) setPincode(savedPin);
+    };
+
+    window.addEventListener("pincodeUpdated", handlePincodeUpdate);
+    return () => window.removeEventListener("pincodeUpdated", handlePincodeUpdate);
+  }, []);
 
   // Search Logic
   const [searchQuery, setSearchQuery] = useState("");
@@ -77,7 +84,6 @@ const Navbar = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Close dropdown if clicked outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
@@ -91,13 +97,15 @@ const Navbar = () => {
   const handleLocationUpdate = (e: React.FormEvent) => {
     e.preventDefault();
     if (tempPincode.length === 6) {
+      localStorage.setItem("user_pincode", tempPincode);
       setPincode(tempPincode);
       setIsLocationModalOpen(false);
       setTempPincode("");
+      // Notify other components
+      window.dispatchEvent(new Event("pincodeUpdated"));
     }
   };
 
-  // --- REDIRECT LOGIC ---
   const handleSearchSubmit = (e?: React.FormEvent, selectedPath?: string) => {
     if (e) e.preventDefault();
     setIsSearchFocused(false);
@@ -115,7 +123,6 @@ const Navbar = () => {
     setSearchQuery(""); 
   };
 
-  // --- REAL-TIME LIVE FILTERING ---
   const filteredSearches = searchQuery 
     ? popularSearches.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 3)
     : popularSearches.slice(0, 3);
@@ -147,7 +154,7 @@ const Navbar = () => {
               <Link to="/wishlist"><Heart size={20} /></Link>
               <Link to="/cart" className="relative">
                 <ShoppingBag size={20} />
-                {cartCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center">{cartCount}</span>}
+                {cartCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">{cartCount}</span>}
               </Link>
             </div>
           </div>
@@ -161,7 +168,6 @@ const Navbar = () => {
               </Link>
             </div>
 
-            {/* --- LIVE SEARCH BAR W/ STACKED DROPDOWN --- */}
             <div className="flex-1 flex justify-center relative" ref={searchContainerRef}>
               <div className="w-full max-w-xl relative">
                 <form 
@@ -194,15 +200,12 @@ const Navbar = () => {
                   </button>
                 </form>
 
-                {/* STACKED DROPDOWN DIRECTLY UNDER SEARCH BAR */}
                 <AnimatePresence>
                   {isSearchFocused && (
                     <motion.div
                       initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
                       className="absolute top-[calc(100%+8px)] left-0 w-full bg-white rounded-2xl shadow-2xl border border-gray-100 p-5 z-40 flex flex-col gap-5"
                     >
-                      
-                      {/* Keyword Suggestions */}
                       {(filteredSearches.length > 0) && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
@@ -230,7 +233,6 @@ const Navbar = () => {
                         </div>
                       )}
 
-                      {/* Category Suggestions */}
                       {(filteredCategories.length > 0) && (
                         <div>
                           <div className="flex items-center gap-2 mb-2">
@@ -252,7 +254,6 @@ const Navbar = () => {
                         </div>
                       )}
 
-                      {/* Trending / Matching Products */}
                       <div className="pt-2 border-t border-gray-50">
                         <div className="flex items-center gap-2 mb-3 mt-1">
                           <Sparkles size={14} className="text-rose-500" />
@@ -260,7 +261,6 @@ const Navbar = () => {
                             {searchQuery ? "Matching Products" : "Trending Products"}
                           </h4>
                         </div>
-                        
                         {filteredProducts.length > 0 ? (
                           <div className="space-y-3">
                             {filteredProducts.map((product) => (
@@ -285,18 +285,19 @@ const Navbar = () => {
                           </div>
                         )}
                       </div>
-
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
             </div>
 
-            {/* Right: Pincode + Icons */}
             <div className="w-64 flex-shrink-0 flex items-center justify-end gap-4">
+              {/* --- UPDATED: Pincode Display --- */}
               <button onClick={() => setIsLocationModalOpen(true)} className="flex items-center gap-1 hover:text-rose-600 transition-colors group">
                 <MapPin size={14} className="text-gray-600 group-hover:text-rose-600" />
-                <span className="text-xs font-semibold text-gray-700 group-hover:text-rose-600">{pincode}</span>
+                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight group-hover:text-rose-600">
+                  {pincode !== "Select Location" ? `Deliver to: ${pincode}` : pincode}
+                </span>
               </button>
 
               <div className="flex items-center gap-3.5">
@@ -332,7 +333,6 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* Desktop Navigation & Mega Menu */}
         <nav className="hidden lg:block border-t border-gray-200 relative bg-white z-10" onMouseLeave={() => setActiveCategory(null)}>
           <div className="container mx-auto px-6 flex items-center justify-center h-11">
             <ul className="flex items-center gap-8">
@@ -383,7 +383,6 @@ const Navbar = () => {
           </AnimatePresence>
         </nav>
 
-        {/* Mobile Menu */}
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="lg:hidden fixed inset-0 top-[110px] bg-white z-50 overflow-y-auto pb-20 border-t border-gray-100">
@@ -403,11 +402,12 @@ const Navbar = () => {
                    <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="w-full bg-rose-600 hover:bg-rose-700 transition-colors text-white font-bold text-sm py-2.5 rounded-lg flex items-center justify-center">Login / Sign Up</Link>
                 </div>
               )}
-              <div className="bg-gray-50 p-4 flex items-center gap-3 border-b border-gray-100" onClick={() => setIsLocationModalOpen(true)}>
+              {/* --- UPDATED: Mobile Location Bar --- */}
+              <div className="bg-gray-50 p-4 flex items-center gap-3 border-b border-gray-100 cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
                   <MapPin size={20} className="text-gray-600" />
                   <div className="flex flex-col">
                     <span className="text-xs text-gray-500">Deliver to</span>
-                    <span className="text-sm font-bold text-gray-900">{pincode ? `India ${pincode}` : "Select Location"}</span>
+                    <span className="text-sm font-bold text-gray-900">{pincode !== "Select Location" ? `India ${pincode}` : pincode}</span>
                   </div>
               </div>
               <div className="flex flex-col p-6 space-y-2">
@@ -425,21 +425,29 @@ const Navbar = () => {
         </AnimatePresence>
       </header>
 
-      {/* Location Modal */}
       <AnimatePresence>
         {isLocationModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsLocationModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden text-center">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-serif text-lg font-medium text-gray-900">Choose your location</h3>
+                <h3 className="font-serif text-lg font-medium text-gray-900">Choose location</h3>
                 <button onClick={() => setIsLocationModalOpen(false)} className="text-gray-400 hover:text-gray-600"><XCircle size={24} /></button>
               </div>
-              <div className="p-6">
-                <p className="text-gray-500 text-sm mb-4">Select a delivery location to see product availability.</p>
+              <div className="p-8">
+                <MapPin size={32} className="text-rose-500 mx-auto mb-4" />
+                <p className="text-gray-500 text-sm mb-6">Select a delivery location to see product availability.</p>
                 <form onSubmit={handleLocationUpdate}>
                   <div className="flex gap-2">
-                    <input type="text" placeholder="Enter Pincode" maxLength={6} className="flex-1 border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500" value={tempPincode} onChange={(e) => setTempPincode(e.target.value.replace(/\D/g, ''))} autoFocus />
+                    <input 
+                      type="text" 
+                      placeholder="Enter Pincode" 
+                      maxLength={6} 
+                      className="flex-1 border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500" 
+                      value={tempPincode} 
+                      onChange={(e) => setTempPincode(e.target.value.replace(/\D/g, ''))} 
+                      autoFocus 
+                    />
                     <button type="submit" disabled={tempPincode.length !== 6} className="bg-rose-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-rose-700 disabled:bg-gray-300 transition-colors">Apply</button>
                   </div>
                 </form>
