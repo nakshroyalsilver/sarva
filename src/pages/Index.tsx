@@ -2,7 +2,6 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import HeroSection from "@/components/home/HeroSection";
 import CategoryShowcase from "@/components/home/CategoryShowcase";
-import FeaturedProducts from "@/components/home/FeaturedProducts";
 import NewArrivals from "@/components/home/NewArrivals";
 import GiftingSection from "@/components/home/GiftingSection";
 import ShopByOccasion from "@/components/home/ShopByOccasion";
@@ -28,7 +27,6 @@ const Index = () => {
         <WhyChooseUs />
         <CategoryShowcase />
         <ShopByOccasion />
-        <FeaturedProducts />
         <StylingCarousel />
         <NewArrivals />
         <ShopByPrice />
