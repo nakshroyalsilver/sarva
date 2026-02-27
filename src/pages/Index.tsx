@@ -10,8 +10,16 @@ import WhyChooseUs from "@/components/home/WhyChooseUs";
 import ShopByPrice from "@/components/home/ShopByPrice";
 import Testimonials from "@/components/home/Testimonials";
 import StylingCarousel from "@/components/home/StylingCarousel";
+import { useSEO } from "@/hooks/useSEO";
 
 const Index = () => {
+  useSEO({
+    title: "Handcrafted 925 Sterling Silver Jewelry in India",
+    description: "Sarvaa Jewelry — India's premium destination for handcrafted 925 Sterling Silver jewelry. Shop silver rings, necklaces, earrings, bracelets & anklets. BIS hallmarked, free shipping, 30-day returns.",
+    keywords: "silver jewelry India, 925 sterling silver, handcrafted silver jewelry, silver rings, silver necklace, silver earrings, Sarvaa jewelry, buy silver jewelry online India",
+    canonicalPath: "/",
+  });
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />

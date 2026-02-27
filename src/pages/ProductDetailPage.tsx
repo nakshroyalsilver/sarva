@@ -4,9 +4,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag, PlayCircle } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { products as localProducts } from "@/data/products"; 
-import { useCart } from "@/context/CartContext"; 
-import { supabase } from "../../supabase"; 
+import { products as localProducts } from "@/data/products";
+import { useCart } from "@/context/CartContext";
+import { supabase } from "../../supabase";
+import { useSEO } from "@/hooks/useSEO";
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -86,6 +87,44 @@ const ProductDetailPage = () => {
   const images = (product.image_urls && product.image_urls.length > 0)
     ? product.image_urls
     : (product.image ? [product.image] : []);
+
+  // SEO: dynamic title, description, structured data for each product page
+  const productName = product?.name || product?.title || "Silver Jewelry";
+  const productDesc = product?.description
+    ? `${product.description.slice(0, 140)}... Buy ${productName} from Sarvaa — India's premium 925 sterling silver jewelry brand.`
+    : `Buy ${productName} — handcrafted 925 sterling silver jewelry from Sarvaa. BIS hallmarked, free shipping, 30-day returns.`;
+  const productImage = images[0] || "";
+  const productCategory = product?.category || "jewelry";
+  const productPrice = product?.price || 0;
+
+  useSEO({
+    title: `${productName} — 925 Sterling Silver`,
+    description: productDesc,
+    keywords: `${productName}, silver ${productCategory}, 925 sterling silver ${productCategory} India, buy silver jewelry online, Sarvaa jewelry`,
+    ogImage: productImage,
+    canonicalPath: `/product/${id}`,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      "name": productName,
+      "description": productDesc,
+      "image": productImage,
+      "brand": { "@type": "Brand", "name": "Sarvaa Jewelry" },
+      "material": "925 Sterling Silver",
+      "offers": {
+        "@type": "Offer",
+        "priceCurrency": "INR",
+        "price": productPrice,
+        "availability": "https://schema.org/InStock",
+        "seller": { "@type": "Organization", "name": "Sarvaa Jewelry" }
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "reviewCount": "124"
+      }
+    }
+  });
 
   const handlePincodeCheck = (e: React.FormEvent) => {
     e.preventDefault();

@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Filter, ChevronDown, SlidersHorizontal, ArrowUpDown, X, Frown } from "lucide-react";
-import Navbar from "@/components/layout/Navbar"; 
-import Footer from "@/components/layout/Footer"; 
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 import ProductCard from "@/components/ProductCard";
 import { supabase } from "../../supabase";
+import { useSEO } from "@/hooks/useSEO";
 
 const CategoryPage = () => {
   const { slug } = useParams();
@@ -72,6 +73,29 @@ const CategoryPage = () => {
     fetchLiveCatalog();
     window.scrollTo(0, 0);
   }, [slug, sortOption]); // <-- Added sortOption to dependency array so it refetches when sort changes
+
+  // SEO: dynamic title + description per category
+  const displayName = categoryName || slug || "Silver Jewelry";
+  useSEO({
+    title: `${displayName} — 925 Sterling Silver`,
+    description: `Shop handcrafted 925 Sterling Silver ${displayName.toLowerCase()} online in India. BIS hallmarked, free shipping & 30-day returns. Only at Sarvaa Jewelry.`,
+    keywords: `silver ${displayName.toLowerCase()} India, buy silver ${displayName.toLowerCase()} online, 925 sterling silver ${displayName.toLowerCase()}, Sarvaa ${displayName.toLowerCase()}`,
+    canonicalPath: `/category/${slug}`,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "name": `${displayName} — Sarvaa Jewelry`,
+      "description": `Browse our collection of handcrafted 925 Sterling Silver ${displayName.toLowerCase()} at Sarvaa Jewelry.`,
+      "url": `https://sarvaajewelry.com/category/${slug}`,
+      "breadcrumb": {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://sarvaajewelry.com" },
+          { "@type": "ListItem", "position": 2, "name": displayName, "item": `https://sarvaajewelry.com/category/${slug}` }
+        ]
+      }
+    }
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
