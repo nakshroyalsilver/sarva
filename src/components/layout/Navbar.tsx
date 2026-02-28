@@ -7,28 +7,21 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "@/context/CartContext"; 
+import { supabase } from "../../../supabase"; 
 
-const navCategories = [
+// Kept static parts outside to keep it clean
+const staticLeftCategories = [
   { name: "New Arrivals", path: "/category/new", highlight: true, featuredImg: "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=400&q=80" },
-  { name: "Rings", path: "/category/rings", subCats: ["Solitaire Rings", "Couple Rings", "Cocktail Rings", "Promise Rings", "Band Rings"], featuredImg: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400&q=80" },
-  { name: "Earrings", path: "/category/earrings", subCats: ["Studs", "Jhumkas", "Hoops", "Danglers", "Ear Cuffs"], featuredImg: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=400&q=80" },
-  { name: "Necklaces", path: "/category/necklaces", subCats: ["Pendants", "Chains", "Chokers", "Lariat", "Mangalsutra"], featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80" },
-  { name: "Bracelets", path: "/category/bracelets", subCats: ["Chain", "Cuff", "Bangles", "Charm"], featuredImg: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&q=80" },
+];
+
+const staticRightCategories = [
   { name: "Gifts", path: "/category/gifts", highlight: true, featuredImg: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=400&q=80" },
   { name: "Corporate", path: "/corporate", featuredImg: "https://images.unsplash.com/photo-1556761175-5973dc0f32b7?w=400&q=80" },
 ];
 
 const searchPlaceholders = ["Search for Rings", "Search for Diamonds", "Search for Necklaces", "Search for 925 Silver"];
-
 const popularSearches = ["Diamond Rings", "Gold Chains", "Bridal Sets", "Platinum Bands", "Mangalsutra", "Stud Earrings", "Chokers", "Couple Rings"];
-const categoryLinks = [
-  { name: "Rings", path: "/category/rings" },
-  { name: "Earrings", path: "/category/earrings" },
-  { name: "Necklaces", path: "/category/necklaces" },
-  { name: "Bracelets", path: "/category/bracelets" },
-  { name: "Gifts", path: "/category/gifts" },
-  { name: "Corporate", path: "/corporate" }
-];
+
 const mockProducts = [
   { id: 1, name: "Rose Gold Solitaire Ring", price: "₹25,999", category: "rings", img: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=200&q=80" },
   { id: 2, name: "Kundan Bridal Choker", price: "₹12,999", category: "necklaces", img: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=200&q=80" },
@@ -48,21 +41,44 @@ const Navbar = () => {
   const [pincode, setPincode] = useState(localStorage.getItem("user_pincode") || "Select Location");
   const [tempPincode, setTempPincode] = useState("");
 
-  useEffect(() => {
-    const handlePincodeUpdate = () => {
-      const savedPin = localStorage.getItem("user_pincode");
-      if (savedPin) setPincode(savedPin);
-    };
-
-    window.addEventListener("pincodeUpdated", handlePincodeUpdate);
-    return () => window.removeEventListener("pincodeUpdated", handlePincodeUpdate);
-  }, []);
+  // --- NEW: Dynamic State for Categories ---
+  const [navCategories, setNavCategories] = useState<any[]>([...staticLeftCategories, ...staticRightCategories]);
+  const [categoryLinks, setCategoryLinks] = useState<{name: string, path: string}[]>([]);
 
   // Search Logic
   const [searchQuery, setSearchQuery] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // --- NEW: Fetch Categories from Supabase ---
+  useEffect(() => {
+    async function fetchCategories() {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('is_visible', true) 
+        .order('created_at', { ascending: true });
+
+      if (data && !error) {
+        // Format DB categories to match the Navbar structure
+        const dbCategories = data.map(cat => ({
+          name: cat.name,
+          path: `/category/${cat.slug}`,
+          featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80", // Fallback image for dropdown
+          subCats: null // Set to null since there are no subcategories in DB yet
+        }));
+
+        // Merge: Static Left + DB Categories + Static Right
+        const combinedNav = [...staticLeftCategories, ...dbCategories, ...staticRightCategories];
+        setNavCategories(combinedNav);
+        
+        // Update category links for the search functionality
+        setCategoryLinks(combinedNav.map(c => ({ name: c.name, path: c.path })));
+      }
+    }
+    fetchCategories();
+  }, []);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("currentUser");
@@ -75,6 +91,16 @@ const Navbar = () => {
     setUser(null);
     navigate("/"); 
   };
+
+  useEffect(() => {
+    const handlePincodeUpdate = () => {
+      const savedPin = localStorage.getItem("user_pincode");
+      if (savedPin) setPincode(savedPin);
+    };
+
+    window.addEventListener("pincodeUpdated", handlePincodeUpdate);
+    return () => window.removeEventListener("pincodeUpdated", handlePincodeUpdate);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -308,7 +334,6 @@ const Navbar = () => {
                         <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Welcome</p>
                         <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
                       </div>
-                      {/* --- UPDATED: My Orders Desktop Link --- */}
                       <Link to="/my-orders" className="block px-4 py-2 text-xs font-medium text-gray-600 hover:bg-rose-50 hover:text-rose-600">My Orders</Link>
                       <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border-t border-gray-50 mt-1 pt-3">Logout</button>
                     </div>
@@ -353,7 +378,7 @@ const Navbar = () => {
                     <div className="w-56">
                       <h3 className="text-xs font-extrabold text-rose-950 uppercase tracking-widest mb-6 border-b border-gray-100 pb-3">By Category</h3>
                       <ul className="space-y-4">
-                        {navCategories.find(c => c.name === activeCategory)?.subCats?.map((sub) => (
+                        {navCategories.find(c => c.name === activeCategory)?.subCats?.map((sub: string) => (
                           <li key={sub}><Link to="#" className="text-sm text-gray-700 hover:text-rose-600 font-semibold">{sub}</Link></li>
                         ))}
                       </ul>
@@ -396,7 +421,6 @@ const Navbar = () => {
                     </div>
                     <button onClick={handleLogout} className="text-xs font-bold text-rose-600 px-3 py-1.5 bg-rose-50 rounded-md hover:bg-rose-100">Logout</button>
                   </div>
-                  {/* --- NEW: My Orders Mobile Link --- */}
                   <Link to="/my-orders" onClick={() => setMobileMenuOpen(false)} className="block px-6 py-3.5 bg-gray-50 border-b border-gray-100 text-sm font-bold text-gray-700 hover:text-rose-600 flex items-center justify-between">
                     <span className="flex items-center gap-2"><Package size={16} className="text-rose-500"/> Track My Orders</span>
                     <ChevronRight size={16} className="text-gray-400" />

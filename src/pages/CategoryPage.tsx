@@ -22,27 +22,35 @@ const CategoryPage = () => {
       try {
         let query = supabase.from('products').select('*, categories(name, slug)');
 
-        if (slug && slug !== 'all' && slug !== 'new-arrivals') {
+        // --- NEW ARRIVAL LOGIC ---
+        if (slug === 'new') {
+          setCategoryName('New Arrivals');
+          // Fetch ONLY products tagged as 'new_arrival' in the Admin panel
+          query = query.eq('is_new_arrival', true);
+        } 
+        // --- NORMAL CATEGORY LOGIC ---
+        else if (slug && slug !== 'all') {
           const { data: catData } = await supabase.from('categories').select('id, name').eq('slug', slug).single();
           if (catData) {
             setCategoryName(catData.name);
             query = query.eq('category_id', catData.id);
           }
-        } else {
-          setCategoryName(slug === 'new-arrivals' ? 'New Arrivals' : 'All Collections');
+        } 
+        // --- ALL COLLECTIONS FALLBACK ---
+        else {
+          setCategoryName('All Collections');
         }
 
-        // --- APPLIED SORTING LOGIC ---
-        if (slug === 'new-arrivals') {
-          query = query.order('created_at', { ascending: false }).limit(20);
-        } else if (sortOption === "newest") {
+        // --- SORTING LOGIC ---
+        if (sortOption === "newest") {
           query = query.order("created_at", { ascending: false });
         } else if (sortOption === "price_low") {
           query = query.order("price", { ascending: true });
         } else if (sortOption === "price_high") {
           query = query.order("price", { ascending: false });
         } else {
-          query = query.order('created_at', { ascending: false }); // Default for 'recommended'
+          // Default for 'recommended' and 'new arrivals'
+          query = query.order('created_at', { ascending: false }); 
         }
 
         const { data: prodData, error } = await query;
@@ -53,7 +61,6 @@ const CategoryPage = () => {
             return {
               ...p,
               name: p.title, 
-              // --- CHANGED: Supports new multiple images array, fallback to old single image ---
               image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
               price: p.price || 0, 
               category: p.categories?.name || 'Uncategorized'
@@ -71,7 +78,7 @@ const CategoryPage = () => {
 
     fetchLiveCatalog();
     window.scrollTo(0, 0);
-  }, [slug, sortOption]); // <-- Added sortOption to dependency array so it refetches when sort changes
+  }, [slug, sortOption]);
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
@@ -181,7 +188,6 @@ const CategoryPage = () => {
           Filters
         </button>
         <div className="flex-1 relative flex flex-col items-center justify-center">
-           {/* MOBILE SORT DROPDOWN OVERLAY */}
            <select 
              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
              value={sortOption}

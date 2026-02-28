@@ -1,180 +1,123 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight } from "lucide-react";
-import { supabase } from "../../../supabase"; // Adjust the path if needed
-import { categories as staticCategories } from "@/data/products"; // Import static data as fallback
+import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
+import { supabase } from "../../../supabase"; 
+import { categories as staticCategories } from "@/data/products";
 
 interface LiveCategory {
   id: string;
   name: string;
   slug: string;
   image: string;
-  count: number;
 }
 
 const CategoryShowcase = () => {
   const [categories, setCategories] = useState<LiveCategory[]>([]);
   const [loading, setLoading] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     async function fetchLiveCategories() {
       try {
-        // Check if Supabase is configured
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-        if (!supabaseUrl || !supabaseKey) {
-          console.info("Supabase not configured, using static data");
-          setCategories(staticCategories.slice(0, 3) as unknown as LiveCategory[]);
-          setLoading(false);
-          return;
-        }
-
-        // 1. Fetch categories (Checking for BOTH singular and plural slugs)
+        // Fetch ALL categories, ignoring the is_visible toggle
         const { data, error } = await supabase
           .from('categories')
-          .select(`
-            id,
-            name,
-            slug,
-            products ( image_url )
-          `)
-          .in('slug', ['earring', 'earrings', 'necklace', 'necklaces', 'bracelet', 'bracelets']) 
+          .select('id, name, slug, is_visible, products ( image_url )')
           .order('name', { ascending: true });
 
         if (error) throw error;
 
-        console.log("Supabase Categories Data:", data); // Helpful for debugging!
-
         if (data && data.length > 0) {
-          // 2. Format the data and assign the correct cover images
           const formattedCategories: LiveCategory[] = data.map((cat: any) => {
-            let coverImage = "";
-
-            // --- CUSTOM CATEGORY IMAGE LOGIC ---
-            if (cat.slug === 'necklace' || cat.slug === 'necklaces') {
-              coverImage = "https://evsasggscybkayavrxmw.supabase.co/storage/v1/object/public/product-images/necklace/0.36013557480999037.jpeg";
-            }
-            else if (cat.slug === 'earring' || cat.slug === 'earrings') {
-              coverImage = cat.products.length > 0 ? cat.products[0].image_url : "https://evsasggscybkayavrxmw.supabase.co/storage/v1/object/public/product-images/earring/earring2.jpg";
-            }
-            else if (cat.slug === 'bracelet' || cat.slug === 'bracelets') {
-              coverImage = cat.products.length > 0 ? cat.products[0].image_url : "https://evsasggscybkayavrxmw.supabase.co/storage/v1/object/public/product-images/bracelet/bracelet1.jpg";
-            }
-            else if (cat.products.length > 0 && cat.products[0].image_url) {
-              // Default fallback: grab the first product image
-              coverImage = cat.products[0].image_url;
-            } else {
-              // Final fallback if totally empty
-              coverImage = "https://placehold.co/400x600/e2e8f0/64748b?text=Coming+Soon";
-            }
-
-            return {
-              id: cat.id,
-              name: cat.name,
-              slug: cat.slug,
-              count: cat.products.length,
-              image: coverImage
-            };
+            let coverImage = cat.products?.[0]?.image_url || "https://placehold.co/400x600/f8f8f8/999999?text=Collection";
+            return { id: cat.id, name: cat.name, slug: cat.slug, image: coverImage };
           });
-
-          // Show maximum of 3 categories on the homepage
-          setCategories(formattedCategories.slice(0, 3));
+          setCategories(formattedCategories);
         } else {
-          // Fallback if Supabase connects but finds 0 matching categories
-          console.warn("Supabase returned empty array, falling back to static data.");
-          setCategories(staticCategories.slice(0, 3) as unknown as LiveCategory[]);
+          setCategories(staticCategories as unknown as LiveCategory[]);
         }
       } catch (error) {
-        console.error("Error fetching categories, using static data:", error);
-        // Fallback to static data on actual error
-        setCategories(staticCategories.slice(0, 3) as unknown as LiveCategory[]);
+        setCategories(staticCategories as unknown as LiveCategory[]);
       } finally {
-        setLoading(false); // Turn off the skeleton loader once data arrives
+        setLoading(false);
       }
     }
-
     fetchLiveCategories();
   }, []);
 
-  return (
-    <section className="py-8 md:py-12 bg-white">
-      <div className="container mx-auto px-6">
+  const scroll = (direction: "left" | "right") => {
+    if (scrollRef.current) {
+      const { scrollLeft, clientWidth } = scrollRef.current;
+      // Scroll by roughly 2 cards at a time
+      const scrollAmount = clientWidth * 0.75; 
+      const scrollTo = direction === "left" ? scrollLeft - scrollAmount : scrollLeft + scrollAmount;
+      scrollRef.current.scrollTo({ left: scrollTo, behavior: "smooth" });
+    }
+  };
 
-        {/* --- SECTION HEADER - Compact --- */}
-        <div className="text-center mb-6 md:mb-8">
+  return (
+    <section className="py-12 md:py-20 bg-white overflow-hidden">
+      <div className="container mx-auto px-6">
+        
+        {/* Header - Simple & Clean */}
+        <div className="text-center mb-10 md:mb-14">
           <motion.span
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
-            className="text-[10px] font-bold tracking-[0.25em] text-rose-500 uppercase mb-2 block"
+            className="text-[10px] font-bold tracking-[0.3em] text-rose-500 uppercase mb-2 block"
           >
-            Collections
+            Our Collections
           </motion.span>
           <motion.h2
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="font-serif text-2xl md:text-4xl text-gray-900 tracking-wide"
+            className="font-serif text-2xl md:text-4xl text-gray-900 tracking-tight"
           >
             Shop by Category
           </motion.h2>
         </div>
 
-        {loading ? (
-          // --- LOADING SKELETON (Shows while waiting for database) ---
-          <div className="flex justify-center py-12">
-            <div className="animate-pulse grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl w-full">
-              {[1, 2, 3].map(i => (
-                <div key={i} className="w-full aspect-[3/4] bg-gray-100 rounded-sm hidden md:block"></div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* --- MOBILE VIEW: "Instagram Story" style circles --- */}
-            <div className="flex md:hidden gap-6 overflow-x-auto pb-8 px-2 scrollbar-hide snap-x justify-center">
-              {categories.map((cat) => (
-                <Link 
-                  key={cat.id} 
-                  to={`/category/${cat.slug}`}
-                  className="flex flex-col items-center flex-shrink-0 snap-center group"
-                >
-                  {/* Circle Image Wrapper */}
-                  <div className="relative w-20 h-20 rounded-full p-[2px] bg-gradient-to-tr from-rose-200 to-transparent group-hover:from-rose-500 group-hover:to-rose-300 transition-all duration-300">
-                    <div className="w-full h-full rounded-full border-[2px] border-white overflow-hidden">
-                      <img
-                        src={cat.image}
-                        alt={cat.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    </div>
-                  </div>
-                  
-                  {/* Category Name below circle */}
-                  <span className="mt-3 text-xs font-medium text-gray-800 tracking-wide text-center">
-                    {cat.name}
-                  </span>
-                </Link>
-              ))}
-            </div>
+        <div className="relative group">
+          {/* --- Navigation Arrows - Positioned over the cards --- */}
+          <button 
+            onClick={() => scroll("left")}
+            className="absolute left-0 top-1/2 -translate-y-1/2 -ml-4 z-20 p-2 bg-white/80 backdrop-blur-md border border-stone-200 rounded-full shadow-lg text-stone-800 hover:bg-stone-900 hover:text-white transition-all duration-300 opacity-0 group-hover:opacity-100 hidden md:flex cursor-pointer"
+            aria-label="Scroll Left"
+          >
+            <ChevronLeft size={24} />
+          </button>
 
-            {/* --- DESKTOP VIEW: 3-Column Grid - Compact --- */}
-            <div className="hidden md:grid grid-cols-3 gap-6 lg:gap-8 max-w-6xl mx-auto items-start">
-              {categories.map((cat, i) => (
+          <button 
+            onClick={() => scroll("right")}
+            className="absolute right-0 top-1/2 -translate-y-1/2 -mr-4 z-20 p-2 bg-white/80 backdrop-blur-md border border-stone-200 rounded-full shadow-lg text-stone-800 hover:bg-stone-900 hover:text-white transition-all duration-300 opacity-0 group-hover:opacity-100 hidden md:flex cursor-pointer"
+            aria-label="Scroll Right"
+          >
+            <ChevronRight size={24} />
+          </button>
+
+          {/* --- Slider Container --- */}
+          {loading ? (
+            <div className="flex gap-6 overflow-hidden">
+               {[1, 2, 3, 4, 5].map(i => (
+                  <div key={i} className="min-w-[220px] md:min-w-[260px] aspect-[3/4] bg-gray-50 animate-pulse rounded-sm"></div>
+                ))}
+            </div>
+          ) : (
+            <div 
+              ref={scrollRef}
+              className="flex gap-5 md:gap-7 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-6"
+            >
+              {categories.map((cat) => (
                 <motion.div
                   key={cat.id}
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-50px" }}
-                  transition={{ duration: 0.6, delay: i * 0.1 }}
-                  className="w-full"
+                  className="flex-shrink-0 w-[220px] md:w-[260px] lg:w-[280px] snap-start"
                 >
-                  <Link to={`/category/${cat.slug}`} className="group flex flex-col cursor-pointer w-full">
+                  <Link to={`/category/${cat.slug}`} className="group flex flex-col w-full">
                     
-                    {/* Image Container with fixed aspect ratio */}
-                    <div className="relative aspect-[3/4] overflow-hidden rounded-sm bg-gray-100 mb-5 w-full">
+                    {/* Compact Image Card */}
+                    <div className="relative aspect-[3/4] overflow-hidden rounded-sm bg-gray-50 mb-5 border border-stone-100 shadow-sm transition-all duration-500 group-hover:shadow-xl">
                       <img
                         src={cat.image}
                         alt={cat.name}
@@ -182,31 +125,38 @@ const CategoryShowcase = () => {
                         loading="lazy"
                       />
                       
-                      {/* Hover "View Collection" Button */}
-                      <div className="absolute inset-x-0 bottom-0 p-4 opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-500 ease-out flex justify-center">
-                        <button className="bg-white/95 backdrop-blur-sm text-gray-900 px-6 py-3 text-xs font-bold uppercase tracking-widest shadow-lg flex items-center gap-2 hover:bg-rose-500 hover:text-white transition-colors w-full justify-center cursor-pointer">
-                          View Collection <ArrowRight size={14} />
-                        </button>
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                      
+                      <div className="absolute inset-x-0 bottom-4 px-4 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-500 flex justify-center">
+                        <div className="bg-white/95 backdrop-blur-sm text-gray-900 px-4 py-2.5 text-[9px] font-bold uppercase tracking-widest shadow-md flex items-center gap-2 hover:bg-rose-600 hover:text-white transition-colors w-full justify-center">
+                          Explore <ArrowRight size={12} />
+                        </div>
                       </div>
                     </div>
 
-                    {/* Text Details below image */}
-                    <div className="text-center mt-auto">
-                      <h3 className="font-serif text-2xl text-gray-900 group-hover:text-rose-600 transition-colors duration-300">
+                    {/* Minimal Category Title */}
+                    <div className="text-center px-2">
+                      <h3 className="font-serif text-lg md:text-xl text-gray-900 group-hover:text-rose-600 transition-colors duration-300 truncate">
                         {cat.name}
                       </h3>
-                      <p className="text-gray-400 text-xs mt-2 uppercase tracking-widest font-medium">
-                        {cat.count} Products
-                      </p>
+                      <div className="mt-3 flex justify-center opacity-40 group-hover:opacity-100 transition-opacity">
+                        <span className="h-[1px] w-6 bg-stone-300 group-hover:w-12 group-hover:bg-rose-400 transition-all duration-500"></span>
+                      </div>
                     </div>
 
                   </Link>
                 </motion.div>
               ))}
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
+
+      <style>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </section>
   );
 };
