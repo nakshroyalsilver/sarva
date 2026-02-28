@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Filter, ChevronDown, SlidersHorizontal, ArrowUpDown, X, Frown } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
@@ -8,8 +8,11 @@ import ProductCard from "@/components/ProductCard";
 import { supabase } from "../../supabase";
 import { useSEO } from "@/hooks/useSEO";
 
+const SPECIAL_SLUGS = ['all', 'new', 'new-arrivals'];
+
 const CategoryPage = () => {
   const { slug } = useParams();
+  const navigate = useNavigate();
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [sortOption, setSortOption] = useState("recommended");
   
@@ -23,18 +26,22 @@ const CategoryPage = () => {
       try {
         let query = supabase.from('products').select('*, categories(name, slug)');
 
-        if (slug && slug !== 'all' && slug !== 'new-arrivals') {
+        if (slug && !SPECIAL_SLUGS.includes(slug)) {
           const { data: catData } = await supabase.from('categories').select('id, name').eq('slug', slug).single();
           if (catData) {
             setCategoryName(catData.name);
             query = query.eq('category_id', catData.id);
+          } else {
+            // Category slug not found in DB — show Coming Soon
+            navigate('/coming-soon', { replace: true });
+            return;
           }
         } else {
-          setCategoryName(slug === 'new-arrivals' ? 'New Arrivals' : 'All Collections');
+          setCategoryName(slug === 'new' || slug === 'new-arrivals' ? 'New Arrivals' : 'All Collections');
         }
 
         // --- APPLIED SORTING LOGIC ---
-        if (slug === 'new-arrivals') {
+        if (slug === 'new' || slug === 'new-arrivals') {
           query = query.order('created_at', { ascending: false }).limit(20);
         } else if (sortOption === "newest") {
           query = query.order("created_at", { ascending: false });

@@ -6,29 +6,11 @@ import {
   TrendingUp, Sparkles, FolderSearch 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useCart } from "@/context/CartContext"; 
-
-const navCategories = [
-  { name: "New Arrivals", path: "/category/new", highlight: true, featuredImg: "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=400&q=80" },
-  { name: "Rings", path: "/category/rings", subCats: ["Solitaire Rings", "Couple Rings", "Cocktail Rings", "Promise Rings", "Band Rings"], featuredImg: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400&q=80" },
-  { name: "Earrings", path: "/category/earrings", subCats: ["Studs", "Jhumkas", "Hoops", "Danglers", "Ear Cuffs"], featuredImg: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=400&q=80" },
-  { name: "Necklaces", path: "/category/necklaces", subCats: ["Pendants", "Chains", "Chokers", "Lariat", "Mangalsutra"], featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80" },
-  { name: "Bracelets", path: "/category/bracelets", subCats: ["Chain", "Cuff", "Bangles", "Charm"], featuredImg: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&q=80" },
-  { name: "Gifts", path: "/category/gifts", highlight: true, featuredImg: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=400&q=80" },
-  { name: "Corporate", path: "/corporate", featuredImg: "https://images.unsplash.com/photo-1556761175-5973dc0f32b7?w=400&q=80" },
-];
+import { useCart } from "@/context/CartContext";
+import { supabase } from "../../../supabase";
 
 const searchPlaceholders = ["Search for Rings", "Search for Diamonds", "Search for Necklaces", "Search for 925 Silver"];
-
 const popularSearches = ["Diamond Rings", "Gold Chains", "Bridal Sets", "Platinum Bands", "Mangalsutra", "Stud Earrings", "Chokers", "Couple Rings"];
-const categoryLinks = [
-  { name: "Rings", path: "/category/rings" },
-  { name: "Earrings", path: "/category/earrings" },
-  { name: "Necklaces", path: "/category/necklaces" },
-  { name: "Bracelets", path: "/category/bracelets" },
-  { name: "Gifts", path: "/category/gifts" },
-  { name: "Corporate", path: "/corporate" }
-];
 const mockProducts = [
   { id: 1, name: "Rose Gold Solitaire Ring", price: "₹25,999", category: "rings", img: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=200&q=80" },
   { id: 2, name: "Kundan Bridal Choker", price: "₹12,999", category: "necklaces", img: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=200&q=80" },
@@ -39,6 +21,30 @@ const mockProducts = [
 const Navbar = () => {
   const { cartCount, wishlistCount } = useCart();
   const navigate = useNavigate();
+
+  const [dbCategories, setDbCategories] = useState<Array<{ id: string; name: string; slug: string }>>([]);
+
+  useEffect(() => {
+    supabase
+      .from('categories')
+      .select('id, name, slug')
+      .order('created_at', { ascending: true })
+      .then(({ data }) => { if (data) setDbCategories(data); });
+  }, []);
+
+  const navCategories = [
+    { name: "New Arrivals", path: "/category/new", highlight: true, featuredImg: "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=400&q=80" },
+    ...dbCategories.map(cat => ({
+      name: cat.name,
+      path: `/category/${cat.slug}`,
+      featuredImg: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400&q=80",
+    })),
+    { name: "Corporate", path: "/corporate", featuredImg: "https://images.unsplash.com/photo-1556761175-5973dc0f32b7?w=400&q=80" },
+  ];
+
+  const categoryLinks = navCategories
+    .filter(c => c.path.startsWith('/category/'))
+    .map(c => ({ name: c.name, path: c.path }));
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);

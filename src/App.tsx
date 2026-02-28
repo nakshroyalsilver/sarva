@@ -42,6 +42,9 @@ const App = () => (
             <Route path="/login" element={<LoginPage />} />
             <Route path="/search" element={<SearchPage />} />
             
+            {/* Coming soon page for unavailable categories */}
+            <Route path="/coming-soon" element={<NotFound />} />
+
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
