@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { 
   Search, Heart, ShoppingBag, User, Menu, X, 
   ChevronRight, ChevronDown, MapPin, XCircle, 
-  TrendingUp, Sparkles, FolderSearch 
+  TrendingUp, Sparkles, FolderSearch ,Package
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "@/context/CartContext"; 
@@ -44,7 +44,6 @@ const Navbar = () => {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
 
-  // --- CHANGED: Location Logic to sync with PincodeModal ---
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [pincode, setPincode] = useState(localStorage.getItem("user_pincode") || "Select Location");
   const [tempPincode, setTempPincode] = useState("");
@@ -101,7 +100,6 @@ const Navbar = () => {
       setPincode(tempPincode);
       setIsLocationModalOpen(false);
       setTempPincode("");
-      // Notify other components
       window.dispatchEvent(new Event("pincodeUpdated"));
     }
   };
@@ -292,7 +290,6 @@ const Navbar = () => {
             </div>
 
             <div className="w-64 flex-shrink-0 flex items-center justify-end gap-4">
-              {/* --- UPDATED: Pincode Display --- */}
               <button onClick={() => setIsLocationModalOpen(true)} className="flex items-center gap-1 hover:text-rose-600 transition-colors group">
                 <MapPin size={14} className="text-gray-600 group-hover:text-rose-600" />
                 <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight group-hover:text-rose-600">
@@ -311,7 +308,8 @@ const Navbar = () => {
                         <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Welcome</p>
                         <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
                       </div>
-                      <Link to="#" className="block px-4 py-2 text-xs font-medium text-gray-600 hover:bg-rose-50 hover:text-rose-600">My Orders</Link>
+                      {/* --- UPDATED: My Orders Desktop Link --- */}
+                      <Link to="/my-orders" className="block px-4 py-2 text-xs font-medium text-gray-600 hover:bg-rose-50 hover:text-rose-600">My Orders</Link>
                       <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border-t border-gray-50 mt-1 pt-3">Logout</button>
                     </div>
                   </div>
@@ -387,23 +385,30 @@ const Navbar = () => {
           {mobileMenuOpen && (
             <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="lg:hidden fixed inset-0 top-[110px] bg-white z-50 overflow-y-auto pb-20 border-t border-gray-100">
               {user ? (
-                <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
-                  <div className="flex items-center gap-3">
-                     <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center font-bold uppercase">{user.name.charAt(0)}</div>
-                     <div>
-                       <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Welcome Back</p>
-                       <p className="text-sm font-bold text-gray-900">{user.name}</p>
-                     </div>
+                <>
+                  <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
+                    <div className="flex items-center gap-3">
+                       <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center font-bold uppercase">{user.name.charAt(0)}</div>
+                       <div>
+                         <p className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">Welcome Back</p>
+                         <p className="text-sm font-bold text-gray-900">{user.name}</p>
+                       </div>
+                    </div>
+                    <button onClick={handleLogout} className="text-xs font-bold text-rose-600 px-3 py-1.5 bg-rose-50 rounded-md hover:bg-rose-100">Logout</button>
                   </div>
-                  <button onClick={handleLogout} className="text-xs font-bold text-rose-600 px-3 py-1.5 bg-rose-50 rounded-md hover:bg-rose-100">Logout</button>
-                </div>
+                  {/* --- NEW: My Orders Mobile Link --- */}
+                  <Link to="/my-orders" onClick={() => setMobileMenuOpen(false)} className="block px-6 py-3.5 bg-gray-50 border-b border-gray-100 text-sm font-bold text-gray-700 hover:text-rose-600 flex items-center justify-between">
+                    <span className="flex items-center gap-2"><Package size={16} className="text-rose-500"/> Track My Orders</span>
+                    <ChevronRight size={16} className="text-gray-400" />
+                  </Link>
+                </>
               ) : (
                 <div className="p-4 border-b border-gray-100 bg-white">
                    <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="w-full bg-rose-600 hover:bg-rose-700 transition-colors text-white font-bold text-sm py-2.5 rounded-lg flex items-center justify-center">Login / Sign Up</Link>
                 </div>
               )}
-              {/* --- UPDATED: Mobile Location Bar --- */}
-              <div className="bg-gray-50 p-4 flex items-center gap-3 border-b border-gray-100 cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
+              
+              <div className="bg-white p-4 flex items-center gap-3 border-b border-gray-100 cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
                   <MapPin size={20} className="text-gray-600" />
                   <div className="flex flex-col">
                     <span className="text-xs text-gray-500">Deliver to</span>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Navigate, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, ShieldCheck, CreditCard, Gift, Check, Banknote, ShoppingBag, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,7 +15,12 @@ const CheckoutPage = () => {
   // 1: Contact, 2: Shipping, 3: Payment
   const [activeStep, setActiveStep] = useState(1);
   
-  const [contactInfo, setContactInfo] = useState({ phone: "", email: "" });
+  // UPDATED: Added your specific number as default
+  const [contactInfo, setContactInfo] = useState({ 
+    phone: "8780791994", 
+    email: "" 
+  });
+
   const [shippingInfo, setShippingInfo] = useState({
     firstName: "", lastName: "", flat: "", street: "", pincode: "", city: "", state: ""
   });
@@ -27,6 +32,24 @@ const CheckoutPage = () => {
   // Processing & Success States
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
+
+  // --- NEW: AUTO-FILL LOGGED-IN USER DATA ---
+  // This ensures the order is tied to the correct account for the "My Orders" page
+  useEffect(() => {
+    const storedUser = localStorage.getItem("currentUser");
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser);
+      setContactInfo((prev) => ({ 
+        ...prev, 
+        email: parsedUser.email // Automatically binds their account email
+      }));
+      setShippingInfo((prev) => ({
+        ...prev,
+        firstName: parsedUser.name?.split(' ')[0] || "",
+        lastName: parsedUser.name?.split(' ').slice(1).join(' ') || ""
+      }));
+    }
+  }, []);
 
   const checkoutItems = state?.directPurchase 
     ? [state.directPurchase] 
@@ -67,7 +90,31 @@ const CheckoutPage = () => {
     }
   };
 
-  // --- NEW: RELATIONAL DATABASE SAVING LOGIC ---
+  // --- WHATSAPP CONFIRMATION LOGIC ---
+  const sendWhatsAppConfirmation = (orderId: string) => {
+    const phoneNumber = contactInfo.phone;
+    const shortId = orderId.split('-')[0].toUpperCase();
+    
+    const itemList = checkoutItems.map(item => 
+      `• ${item.name} (Size: ${item.size || 'Std'}) x ${item.qty}`
+    ).join('%0A');
+
+    const message = 
+      `*Order Confirmed!* ✨%0A%0A` +
+      `Hello ${shippingInfo.firstName}, thank you for choosing *Sarvaa Fine Jewelry*.%0A%0A` +
+      `*Order ID:* #${shortId}%0A` +
+      `*Order Details:*%0A` +
+      `${itemList}%0A%0A` +
+      `*Total Amount:* ₹${total.toLocaleString()}%0A` +
+      `*Payment:* ${paymentMethod.toUpperCase()}%0A%0A` +
+      `*Shipping Address:*%0A${shippingInfo.flat}, ${shippingInfo.street}, ${shippingInfo.city}, ${shippingInfo.pincode}%0A%0A` +
+      `We are preparing your jewelry for dispatch. You will receive tracking details shortly.`;
+
+    const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${message}`;
+    window.open(whatsappUrl, '_blank');
+  };
+
+  // --- RELATIONAL DATABASE SAVING LOGIC ---
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
 
@@ -75,7 +122,7 @@ const CheckoutPage = () => {
       // Step 1: Insert the main Order record
       const orderPayload = {
         total_amount: total,
-        status: paymentMethod === 'online' ? 'Pending Payment' : 'Processing', // Fits your schema's default
+        status: paymentMethod === 'online' ? 'Pending Payment' : 'Processing',
         customer_phone: `+91${contactInfo.phone}`,
         customer_email: contactInfo.email,
         shipping_address: shippingInfo,
@@ -85,14 +132,12 @@ const CheckoutPage = () => {
         cod_charge: codCharge,
         payment_method: paymentMethod,
         gift_message: showGiftMessage ? giftMessage : null,
-        // Note: user_id is left null here assuming guest checkout. 
-        // If logged in, you would add: user_id: currentUser.id
       };
 
       const { data: newOrder, error: orderError } = await supabase
         .from('orders')
         .insert([orderPayload])
-        .select('id') // We strictly need the new ID returned to us
+        .select('id')
         .single();
 
       if (orderError) throw orderError;
@@ -100,10 +145,10 @@ const CheckoutPage = () => {
       // Step 2: Map cart items to match your 'order_items' table schema
       const orderItemsPayload = checkoutItems.map((item: any) => ({
         order_id: newOrder.id,
-        product_id: item.id, // Must be a valid UUID from your products table
+        product_id: item.id,
         quantity: item.qty,
         price_at_purchase: item.price,
-        size: item.size || null // Uses the new size column we added
+        size: item.size || null 
       }));
 
       // Step 3: Insert all items into the 'order_items' table
@@ -113,10 +158,14 @@ const CheckoutPage = () => {
 
       if (itemsError) throw itemsError;
 
-      // Step 4: Clear Cart & Show Success
+      // Step 4: Clear Cart & Trigger WhatsApp Confirmation
       if (!state?.directPurchase) {
         localStorage.removeItem("sarvaa_cart");
       }
+
+      // Trigger the WhatsApp message
+      sendWhatsAppConfirmation(newOrder.id);
+      
       setOrderSuccess(true);
 
     } catch (error: any) {
@@ -128,7 +177,7 @@ const CheckoutPage = () => {
   };
 
   const handleFinish = () => {
-    window.location.href = "/";
+    navigate("/my-orders"); // Redirects directly to the tracking page
   };
 
   return (
@@ -172,13 +221,10 @@ const CheckoutPage = () => {
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
                     <form onSubmit={handleContinueToShipping} className="p-6 pt-0 border-t border-gray-50">
                       <div className="grid md:grid-cols-2 gap-6 mt-4">
-                        
                         <div>
                             <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Mobile Number *</label>
                             <div className="flex items-center border-b border-gray-300 focus-within:border-rose-500 transition-colors">
-                              <span className="text-sm font-medium text-gray-600 pr-3 border-r border-gray-200 mr-3 py-2 bg-transparent select-none">
-                                +91
-                              </span>
+                              <span className="text-sm font-medium text-gray-600 pr-3 border-r border-gray-200 mr-3 py-2 bg-transparent select-none">+91</span>
                               <input 
                                 type="tel" 
                                 required
@@ -190,7 +236,6 @@ const CheckoutPage = () => {
                               />
                             </div>
                         </div>
-
                         <div className="relative">
                             <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Email Address *</label>
                             <input type="email" required value={contactInfo.email} onChange={(e) => setContactInfo({...contactInfo, email: e.target.value})} placeholder="For order updates" className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 transition-colors bg-transparent" />
@@ -256,7 +301,6 @@ const CheckoutPage = () => {
                             <input required type="text" value={shippingInfo.state} onChange={(e) => setShippingInfo({...shippingInfo, state: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
                           </div>
                         </div>
-                        
                         <div className="pt-4 pb-2 border-t border-gray-50">
                             <label className="flex items-center gap-2 cursor-pointer mb-3">
                                 <input type="checkbox" checked={showGiftMessage} onChange={() => setShowGiftMessage(!showGiftMessage)} className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer" />
@@ -288,12 +332,10 @@ const CheckoutPage = () => {
                   Payment Method
                 </h2>
               </div>
-              
               <AnimatePresence>
                 {activeStep === 3 && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} className="overflow-hidden">
                     <div className="p-6 pt-0 border-t border-gray-50">
-                      
                       <div className="space-y-3 mt-2">
                         <label className={`block border rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === 'online' ? 'border-rose-600 bg-rose-50/50' : 'border-gray-200 hover:border-rose-200'}`}>
                           <div className="flex items-start gap-3">
@@ -304,7 +346,6 @@ const CheckoutPage = () => {
                             </div>
                           </div>
                         </label>
-
                         <label className={`block border rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === 'cod' ? 'border-rose-600 bg-rose-50/50' : 'border-gray-200 hover:border-rose-200'}`}>
                           <div className="flex items-start gap-3">
                             <input type="radio" name="paymentMethod" value="cod" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="mt-1 w-4 h-4 text-rose-600 focus:ring-rose-500 cursor-pointer" />
@@ -317,35 +358,25 @@ const CheckoutPage = () => {
                         </label>
                       </div>
 
-                      <button 
-                        onClick={handlePlaceOrder}
-                        disabled={isProcessing}
-                        className="w-full mt-8 bg-rose-600 text-white py-4 rounded-lg font-bold uppercase tracking-widest text-sm hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                      >
-                        {isProcessing ? 'Processing...' : (paymentMethod === 'online' ? `Pay ₹${total.toLocaleString()} Securely` : 'Place Order')}
+                      <button onClick={handlePlaceOrder} disabled={isProcessing} className="w-full mt-8 bg-rose-600 text-white py-4 rounded-lg font-bold uppercase tracking-widest text-sm hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
+                        {isProcessing ? 'Processing Order...' : (paymentMethod === 'online' ? `Pay ₹${total.toLocaleString()} Securely` : 'Place Order')}
                       </button>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-
           </div>
 
           {/* RIGHT COLUMN: ORDER SUMMARY */}
           <div className="lg:w-[45%]">
             <div className="sticky top-28 space-y-6">
-                
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-                  <h3 className="font-serif text-lg text-gray-900 mb-6 pb-4 border-b border-gray-50 flex items-center gap-2">
-                    <ShoppingBag size={18} className="text-rose-600" /> Order Summary
-                  </h3>
+                  <h3 className="font-serif text-lg text-gray-900 mb-6 pb-4 border-b border-gray-50 flex items-center gap-2"><ShoppingBag size={18} className="text-rose-600" /> Order Summary</h3>
                   <div className="space-y-5 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
                     {checkoutItems.map((item: any, idx: number) => (
                       <div key={`${item.id}-${idx}`} className="flex gap-4 items-start">
-                        <div className="w-20 h-24 bg-gray-50 rounded-lg overflow-hidden shrink-0 border border-gray-100">
-                          <img src={item.image} className="w-full h-full object-cover" />
-                        </div>
+                        <div className="w-20 h-24 bg-gray-50 rounded-lg overflow-hidden shrink-0 border border-gray-100"><img src={item.image} className="w-full h-full object-cover" /></div>
                         <div className="flex-1 pt-1">
                           <h4 className="text-sm font-medium text-gray-900 line-clamp-2 leading-relaxed">{item.name}</h4>
                           <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-500">
@@ -355,85 +386,43 @@ const CheckoutPage = () => {
                           </div>
                           <div className="flex items-center gap-2 mt-2">
                              <span className="text-sm font-bold text-gray-900">₹{(item.price * item.qty).toLocaleString()}</span>
-                             {item.originalPrice && <span className="text-xs text-gray-400 line-through">₹{(item.originalPrice * item.qty).toLocaleString()}</span>}
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
-
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-5">Price Details</h3>
                     <div className="space-y-3.5 text-sm">
-                        <div className="flex justify-between text-gray-600">
-                            <span>Total MRP</span>
-                            <span>₹{totalMRP.toLocaleString()}</span>
-                        </div>
-                        {totalDiscount > 0 && (
-                          <div className="flex justify-between text-green-600">
-                              <span>Discount on MRP</span>
-                              <span>- ₹{totalDiscount.toLocaleString()}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between text-gray-600">
-                            <span>Shipping</span>
-                            <span className="text-green-600 font-medium">{shipping === 0 ? "FREE" : `₹${shipping}`}</span>
-                        </div>
-                        {codCharge > 0 && (
-                          <div className="flex justify-between text-rose-600">
-                              <span>COD Handling Fee</span>
-                              <span>₹{codCharge}</span>
-                          </div>
-                        )}
+                        <div className="flex justify-between text-gray-600"><span>Total MRP</span><span>₹{totalMRP.toLocaleString()}</span></div>
+                        {totalDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount on MRP</span><span>- ₹{totalDiscount.toLocaleString()}</span></div>}
+                        <div className="flex justify-between text-gray-600"><span>Shipping</span><span className="text-green-600 font-medium">{shipping === 0 ? "FREE" : `₹${shipping}`}</span></div>
+                        {codCharge > 0 && <div className="flex justify-between text-rose-600"><span>COD Fee</span><span>₹{codCharge}</span></div>}
                         <div className="h-px bg-dashed border-t border-dashed border-gray-200 my-4" />
                         <div className="flex justify-between items-center">
-                            <div className="flex flex-col">
-                              <span className="font-bold text-gray-900 text-base">Total Amount</span>
-                              <span className="text-[10px] text-gray-400 font-medium">Inclusive of VAT/GST</span>
-                            </div>
+                            <div className="flex flex-col"><span className="font-bold text-gray-900 text-base">Total Amount</span><span className="text-[10px] text-gray-400 font-medium">Inclusive of VAT/GST</span></div>
                             <span className="font-bold text-gray-900 text-xl">₹{total.toLocaleString()}</span>
                         </div>
                     </div>
                 </div>
-
             </div>
           </div>
-
         </div>
       </main>
 
-      {/* --- SUCCESS POPUP MODAL --- */}
       <AnimatePresence>
         {orderSuccess && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
-            animate={{ opacity: 1 }} 
-            className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          >
-            <motion.div 
-              initial={{ scale: 0.9, y: 20 }} 
-              animate={{ scale: 1, y: 0 }} 
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-8"
-            >
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle2 size={32} className="text-green-600" />
-              </div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-8">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={32} className="text-green-600" /></div>
               <h2 className="font-serif text-2xl text-gray-900 mb-2">Order Confirmed!</h2>
-              <p className="text-sm text-gray-500 mb-8">
-                Thank you, {shippingInfo.firstName}. Your order has been placed successfully. We have sent the details to {contactInfo.email}.
-              </p>
-              <button 
-                onClick={handleFinish}
-                className="w-full py-3.5 bg-gray-900 text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors cursor-pointer"
-              >
-                Continue Shopping
-              </button>
+              <p className="text-sm text-gray-500 mb-8">Thank you, {shippingInfo.firstName}. Your order has been placed successfully. We've sent a confirmation to your WhatsApp number +91 {contactInfo.phone}.</p>
+              <button onClick={handleFinish} className="w-full py-3.5 bg-gray-900 text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors cursor-pointer">Track My Order</button>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-      
       <Footer />
     </div>
   );
