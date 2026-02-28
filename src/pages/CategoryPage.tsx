@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Filter, ChevronDown, SlidersHorizontal, ArrowUpDown, X, Frown } from "lucide-react";
@@ -7,67 +7,57 @@ import Footer from "@/components/layout/Footer";
 import ProductCard from "@/components/ProductCard";
 import { supabase } from "../../supabase";
 
+const PRICE_RANGES = ["Under ₹1000", "₹1000 - ₹2500", "₹2500 - ₹5000", "Above ₹5000"];
+const MATERIAL_OPTIONS = ["925 Sterling Silver", "Rose Gold Plated", "Oxidized Silver", "Gold Plated"];
+
 const CategoryPage = () => {
   const { slug } = useParams();
-  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
-  const [sortOption, setSortOption] = useState("recommended");
   
-  const [liveProducts, setLiveProducts] = useState<any[]>([]);
+  // UI State
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [categoryName, setCategoryName] = useState("");
   const [loading, setLoading] = useState(true);
+  
+  // Data State
+  const [rawProducts, setRawProducts] = useState<any[]>([]);
+  
+  // Filter & Sort State
+  const [sortOption, setSortOption] = useState("recommended");
+  const [selectedPrices, setSelectedPrices] = useState<string[]>([]);
 
+  // 1. Fetch the raw data ONCE when the category changes
   useEffect(() => {
     async function fetchLiveCatalog() {
       setLoading(true);
       try {
-        let query = supabase.from('products').select('*, categories(name, slug)');
+        // Fetch base data sorted by newest by default
+        let query = supabase.from('products').select('*, categories(name, slug)').order('created_at', { ascending: false });
 
-        // --- NEW ARRIVAL LOGIC ---
         if (slug === 'new') {
           setCategoryName('New Arrivals');
-          // Fetch ONLY products tagged as 'new_arrival' in the Admin panel
           query = query.eq('is_new_arrival', true);
-        } 
-        // --- NORMAL CATEGORY LOGIC ---
-        else if (slug && slug !== 'all') {
+        } else if (slug && slug !== 'all') {
           const { data: catData } = await supabase.from('categories').select('id, name').eq('slug', slug).single();
           if (catData) {
             setCategoryName(catData.name);
             query = query.eq('category_id', catData.id);
           }
-        } 
-        // --- ALL COLLECTIONS FALLBACK ---
-        else {
-          setCategoryName('All Collections');
-        }
-
-        // --- SORTING LOGIC ---
-        if (sortOption === "newest") {
-          query = query.order("created_at", { ascending: false });
-        } else if (sortOption === "price_low") {
-          query = query.order("price", { ascending: true });
-        } else if (sortOption === "price_high") {
-          query = query.order("price", { ascending: false });
         } else {
-          // Default for 'recommended' and 'new arrivals'
-          query = query.order('created_at', { ascending: false }); 
+          setCategoryName('All Collections');
         }
 
         const { data: prodData, error } = await query;
         if (error) throw error;
 
         if (prodData) {
-          const formattedProducts = prodData.map(p => {
-            return {
-              ...p,
-              name: p.title, 
-              image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
-              price: p.price || 0, 
-              category: p.categories?.name || 'Uncategorized'
-            };
-          });
-
-          setLiveProducts(formattedProducts);
+          const formattedProducts = prodData.map(p => ({
+            ...p,
+            name: p.title, 
+            image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
+            price: p.price || 0, 
+            category: p.categories?.name || 'Uncategorized'
+          }));
+          setRawProducts(formattedProducts);
         }
       } catch (error) {
         console.error("Error fetching live catalog:", error);
@@ -77,8 +67,51 @@ const CategoryPage = () => {
     }
 
     fetchLiveCatalog();
+    // Reset filters when changing pages
+    setSelectedPrices([]);
+    setSortOption("recommended");
     window.scrollTo(0, 0);
-  }, [slug, sortOption]);
+  }, [slug]);
+
+  // 2. Instant Frontend Filtering & Sorting
+  const displayedProducts = useMemo(() => {
+    let result = [...rawProducts];
+
+    // Filter by Price
+    if (selectedPrices.length > 0) {
+      result = result.filter(product => {
+        return selectedPrices.some(range => {
+          if (range === "Under ₹1000") return product.price < 1000;
+          if (range === "₹1000 - ₹2500") return product.price >= 1000 && product.price <= 2500;
+          if (range === "₹2500 - ₹5000") return product.price > 2500 && product.price <= 5000;
+          if (range === "Above ₹5000") return product.price > 5000;
+          return false;
+        });
+      });
+    }
+
+    // Sort Results
+    if (sortOption === "price_low") {
+      result.sort((a, b) => a.price - b.price);
+    } else if (sortOption === "price_high") {
+      result.sort((a, b) => b.price - a.price);
+    } else if (sortOption === "newest") {
+      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+
+    return result;
+  }, [rawProducts, selectedPrices, sortOption]);
+
+  // 3. Handlers
+  const togglePriceFilter = (range: string) => {
+    setSelectedPrices(prev => 
+      prev.includes(range) ? prev.filter(p => p !== range) : [...prev, range]
+    );
+  };
+
+  const clearAllFilters = () => {
+    setSelectedPrices([]);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
@@ -92,37 +125,64 @@ const CategoryPage = () => {
             <span className="text-gray-900 capitalize font-semibold">{loading ? "..." : categoryName}</span>
           </div>
 
-          <div className="border-b border-gray-100 pb-4 md:pb-6">
-            <h1 className="font-serif text-2xl md:text-4xl text-gray-900 capitalize mb-2">
-              {loading ? "Loading..." : categoryName}
-            </h1>
-            <p className="text-gray-500 text-xs md:text-sm max-w-2xl font-light">
-              {loading ? "Counting designs..." : `${liveProducts.length} Designs Found`}
-            </p>
+          <div className="border-b border-stone-200 pb-8 md:pb-12 mb-4 mt-2">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div className="max-w-2xl">
+                <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 capitalize tracking-tight mb-4">
+                  {loading ? "Loading Collection..." : categoryName}
+                </h1>
+                <p className="text-stone-500 text-sm md:text-base font-light leading-relaxed">
+                  {loading 
+                    ? "Curating our finest pieces for you..." 
+                    : `Explore our exclusive collection of ${categoryName.toLowerCase()}, crafted with precision and timeless elegance.`}
+                </p>
+              </div>
+              
+              {!loading && (
+                <div className="flex items-center gap-4 shrink-0 mt-2 md:mt-0">
+                  <span className="hidden md:block w-12 h-px bg-stone-300"></span>
+                  <span className="inline-flex items-center justify-center text-[10px] md:text-xs font-bold tracking-[0.2em] uppercase text-stone-500 bg-stone-50 px-4 py-2 rounded-full border border-stone-200 shadow-sm">
+                    {displayedProducts.length} {displayedProducts.length === 1 ? 'Piece' : 'Pieces'}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="container mx-auto px-4 lg:px-6 flex gap-8 items-start relative mt-4 md:mt-6">
+          
+          {/* DESKTOP SIDEBAR */}
           <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-28 h-[calc(100vh-120px)] overflow-y-auto pr-4 custom-scrollbar">
             <div className="space-y-8 pb-10">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-bold text-gray-900 uppercase tracking-widest text-xs">Filters</h3>
-                <button className="text-[10px] text-rose-600 underline cursor-pointer hover:text-rose-700">Clear All</button>
+                {selectedPrices.length > 0 && (
+                  <button onClick={clearAllFilters} className="text-[10px] text-rose-600 underline cursor-pointer hover:text-rose-700">Clear All</button>
+                )}
               </div>
 
               <FilterSection title="Price">
-                {["Under ₹1000", "₹1000 - ₹2500", "₹2500 - ₹5000", "Above ₹5000"].map((range) => (
+                {PRICE_RANGES.map((range) => (
                   <label key={range} className="flex items-center gap-3 cursor-pointer group py-1">
-                    <input type="checkbox" className="appearance-none w-4 h-4 border border-gray-300 rounded-[3px] checked:bg-rose-600 checked:border-rose-600 transition-all" />
+                    <input 
+                      type="checkbox" 
+                      checked={selectedPrices.includes(range)}
+                      onChange={() => togglePriceFilter(range)}
+                      className="w-4 h-4 rounded border-gray-300 text-rose-600 accent-rose-600 focus:ring-rose-500 cursor-pointer" 
+                    />
                     <span className="text-sm text-gray-600 group-hover:text-rose-600 transition-colors">{range}</span>
                   </label>
                 ))}
               </FilterSection>
+              
               <div className="h-px bg-gray-100" />
+              
+              {/* MATERIAL PLACEHOLDER */}
               <FilterSection title="Material">
-                {["925 Sterling Silver", "Rose Gold Plated", "Oxidized Silver", "Gold Plated"].map((mat) => (
+                {MATERIAL_OPTIONS.map((mat) => (
                   <label key={mat} className="flex items-center gap-3 cursor-pointer group py-1">
-                    <input type="checkbox" className="appearance-none w-4 h-4 border border-gray-300 rounded-[3px] checked:bg-rose-600 checked:border-rose-600 transition-all" />
+                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-rose-600 accent-rose-600 focus:ring-rose-500 cursor-pointer" />
                     <span className="text-sm text-gray-600 group-hover:text-rose-600 transition-colors">{mat}</span>
                   </label>
                 ))}
@@ -130,6 +190,7 @@ const CategoryPage = () => {
             </div>
           </aside>
 
+          {/* PRODUCT GRID */}
           <div className="flex-1 w-full">
             <div className="hidden lg:flex justify-end items-center mb-6">
                <div className="flex items-center gap-3">
@@ -160,17 +221,21 @@ const CategoryPage = () => {
                   </div>
                 ))}
               </div>
-            ) : liveProducts.length > 0 ? (
+            ) : displayedProducts.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-3 gap-y-8 md:gap-x-6 md:gap-y-12">
-                {liveProducts.map((product) => (
+                {displayedProducts.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <Frown size={48} className="text-gray-300 mb-4" />
-                <p className="text-gray-500">No products found in this category.</p>
-                <Link to="/" className="mt-4 text-rose-600 font-bold text-sm underline">Back Home</Link>
+                <p className="text-gray-500 mb-4">No products found matching your filters.</p>
+                {selectedPrices.length > 0 ? (
+                  <button onClick={clearAllFilters} className="text-rose-600 font-bold text-sm underline cursor-pointer">Clear Filters</button>
+                ) : (
+                  <Link to="/" className="text-rose-600 font-bold text-sm underline">Back Home</Link>
+                )}
               </div>
             )}
           </div>
@@ -179,11 +244,15 @@ const CategoryPage = () => {
 
       <Footer />
 
+      {/* MOBILE BOTTOM NAV */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 flex shadow-[0_-4px_10px_rgba(0,0,0,0.05)] pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2">
         <button 
           onClick={() => setIsMobileFilterOpen(true)} 
-          className="flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-bold text-gray-800 uppercase tracking-widest border-r border-gray-100 active:bg-gray-50"
+          className="flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-bold text-gray-800 uppercase tracking-widest border-r border-gray-100 active:bg-gray-50 relative"
         >
+          {selectedPrices.length > 0 && (
+            <span className="absolute top-1 right-[30%] w-2 h-2 bg-rose-600 rounded-full"></span>
+          )}
           <SlidersHorizontal size={18} className="text-gray-600" /> 
           Filters
         </button>
@@ -205,6 +274,7 @@ const CategoryPage = () => {
         </div>
       </div>
 
+      {/* MOBILE FILTER MENU */}
       <AnimatePresence>
         {isMobileFilterOpen && (
           <>
@@ -212,23 +282,35 @@ const CategoryPage = () => {
             <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 300 }} className="fixed inset-y-0 right-0 w-[85%] max-w-xs bg-white z-[60] shadow-2xl overflow-y-auto lg:hidden">
               <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
                 <h2 className="font-serif text-lg text-gray-900">Filters</h2>
-                <button onClick={() => setIsMobileFilterOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500"><X size={20} /></button>
+                <div className="flex items-center gap-4">
+                  {selectedPrices.length > 0 && (
+                    <button onClick={clearAllFilters} className="text-[10px] text-rose-600 underline font-bold uppercase tracking-widest">Clear</button>
+                  )}
+                  <button onClick={() => setIsMobileFilterOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 cursor-pointer"><X size={20} /></button>
+                </div>
               </div>
               
               <div className="p-6 space-y-8 pb-32">
                  <FilterSection title="Price">
-                    {["Under ₹1000", "₹1000 - ₹2500", "Above ₹5000"].map((range) => (
-                      <label key={range} className="flex items-center gap-3 py-2">
-                        <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500" />
+                    {PRICE_RANGES.map((range) => (
+                      <label key={range} className="flex items-center gap-3 py-2 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedPrices.includes(range)}
+                          onChange={() => togglePriceFilter(range)}
+                          className="w-5 h-5 rounded border-gray-300 text-rose-600 accent-rose-600 focus:ring-rose-500" 
+                        />
                         <span className="text-sm text-gray-700">{range}</span>
                       </label>
                     ))}
                  </FilterSection>
                  <div className="h-px bg-gray-100" />
+                 
+                 {/* MATERIAL PLACEHOLDER */}
                  <FilterSection title="Material">
-                    {["Silver", "Rose Gold", "Oxidized"].map((m) => (
-                      <label key={m} className="flex items-center gap-3 py-2">
-                        <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-rose-600 focus:ring-rose-500" />
+                    {MATERIAL_OPTIONS.map((m) => (
+                      <label key={m} className="flex items-center gap-3 py-2 cursor-pointer">
+                        <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-rose-600 accent-rose-600 focus:ring-rose-500" />
                         <span className="text-sm text-gray-700">{m}</span>
                       </label>
                     ))}
@@ -236,7 +318,7 @@ const CategoryPage = () => {
               </div>
               
               <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-white pb-[calc(1rem+env(safe-area-inset-bottom))]">
-                 <button onClick={() => setIsMobileFilterOpen(false)} className="w-full bg-rose-600 text-white py-3.5 rounded-lg font-bold uppercase tracking-widest text-xs shadow-lg shadow-rose-200">Apply Filters</button>
+                 <button onClick={() => setIsMobileFilterOpen(false)} className="w-full bg-rose-600 text-white py-3.5 rounded-lg font-bold uppercase tracking-widest text-xs shadow-lg shadow-rose-200 cursor-pointer">Show {displayedProducts.length} Results</button>
               </div>
             </motion.div>
           </>
