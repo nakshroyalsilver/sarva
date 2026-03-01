@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useLocation, Navigate, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ShieldCheck, CreditCard, Gift, Check, Banknote, ShoppingBag, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, ShieldCheck, CreditCard, Gift, Check, Banknote, ShoppingBag, CheckCircle2, MessageCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/context/CartContext";
 import { supabase } from "../../supabase"; 
+import emailjs from '@emailjs/browser';
 
 const CheckoutPage = () => {
   const { state } = useLocation();
@@ -15,7 +16,7 @@ const CheckoutPage = () => {
   // 1: Contact, 2: Shipping, 3: Payment
   const [activeStep, setActiveStep] = useState(1);
   
-  // UPDATED: Added your specific number as default
+  // Default contact
   const [contactInfo, setContactInfo] = useState({ 
     phone: "8780791994", 
     email: "" 
@@ -27,21 +28,23 @@ const CheckoutPage = () => {
   
   const [showGiftMessage, setShowGiftMessage] = useState(false);
   const [giftMessage, setGiftMessage] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"online" | "cod">("online");
+  
+  // Default is whatsapp
+  const [paymentMethod, setPaymentMethod] = useState<"whatsapp" | "online" | "cod">("whatsapp");
 
   // Processing & Success States
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
+  const [whatsappLink, setWhatsappLink] = useState("");
 
-  // --- NEW: AUTO-FILL LOGGED-IN USER DATA ---
-  // This ensures the order is tied to the correct account for the "My Orders" page
+  // --- AUTO-FILL LOGGED-IN USER DATA ---
   useEffect(() => {
     const storedUser = localStorage.getItem("currentUser");
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
       setContactInfo((prev) => ({ 
         ...prev, 
-        email: parsedUser.email // Automatically binds their account email
+        email: parsedUser.email 
       }));
       setShippingInfo((prev) => ({
         ...prev,
@@ -63,9 +66,8 @@ const CheckoutPage = () => {
   const totalMRP = checkoutItems.reduce((acc: number, item: any) => acc + ((item.originalPrice || item.price) * item.qty), 0);
   const totalDiscount = totalMRP - subtotal;
   
-  const codCharge = paymentMethod === "cod" ? 50 : 0;
   const shipping = subtotal > 999 ? 0 : 99;
-  const total = subtotal + shipping + codCharge;
+  const total = subtotal + shipping;
 
   const handleBack = () => {
     if (state?.directPurchase) navigate(-1);
@@ -90,46 +92,31 @@ const CheckoutPage = () => {
     }
   };
 
-  // --- WHATSAPP CONFIRMATION LOGIC ---
-  const sendWhatsAppConfirmation = (orderId: string) => {
-    const phoneNumber = contactInfo.phone;
-    const shortId = orderId.split('-')[0].toUpperCase();
-    
-    const itemList = checkoutItems.map(item => 
-      `• ${item.name} (Size: ${item.size || 'Std'}) x ${item.qty}`
-    ).join('%0A');
-
-    const message = 
-      `*Order Confirmed!* ✨%0A%0A` +
-      `Hello ${shippingInfo.firstName}, thank you for choosing *Sarvaa Fine Jewelry*.%0A%0A` +
-      `*Order ID:* #${shortId}%0A` +
-      `*Order Details:*%0A` +
-      `${itemList}%0A%0A` +
-      `*Total Amount:* ₹${total.toLocaleString()}%0A` +
-      `*Payment:* ${paymentMethod.toUpperCase()}%0A%0A` +
-      `*Shipping Address:*%0A${shippingInfo.flat}, ${shippingInfo.street}, ${shippingInfo.city}, ${shippingInfo.pincode}%0A%0A` +
-      `We are preparing your jewelry for dispatch. You will receive tracking details shortly.`;
-
-    const whatsappUrl = `https://wa.me/91${phoneNumber}?text=${message}`;
-    window.open(whatsappUrl, '_blank');
-  };
-
-  // --- RELATIONAL DATABASE SAVING LOGIC ---
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
 
     try {
-      // Step 1: Insert the main Order record
+      // 1. SAFETY CHECK
+      const isValidUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+      
+      const hasFakeProducts = checkoutItems.some((item: any) => !isValidUUID(item.id));
+      if (hasFakeProducts) {
+        alert("Wait! You have old test products in your cart. Please go back, clear your cart, and add real products from the live store.");
+        setIsProcessing(false);
+        return; 
+      }
+
+      // Step 2: Insert the main Order record
       const orderPayload = {
         total_amount: total,
-        status: paymentMethod === 'online' ? 'Pending Payment' : 'Processing',
+        status: 'Pending WhatsApp',
         customer_phone: `+91${contactInfo.phone}`,
         customer_email: contactInfo.email,
         shipping_address: shippingInfo,
         subtotal: subtotal,
         discount: totalDiscount,
         shipping_fee: shipping,
-        cod_charge: codCharge,
+        cod_charge: 0,
         payment_method: paymentMethod,
         gift_message: showGiftMessage ? giftMessage : null,
       };
@@ -142,7 +129,7 @@ const CheckoutPage = () => {
 
       if (orderError) throw orderError;
 
-      // Step 2: Map cart items to match your 'order_items' table schema
+      // Step 3: Map & Insert cart items 
       const orderItemsPayload = checkoutItems.map((item: any) => ({
         order_id: newOrder.id,
         product_id: item.id,
@@ -151,33 +138,116 @@ const CheckoutPage = () => {
         size: item.size || null 
       }));
 
-      // Step 3: Insert all items into the 'order_items' table
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItemsPayload);
-
+      const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
       if (itemsError) throw itemsError;
 
-      // Step 4: Clear Cart & Trigger WhatsApp Confirmation
+      // Step 4: Clear Cart
       if (!state?.directPurchase) {
-        localStorage.removeItem("sarvaa_cart");
+        localStorage.removeItem("sarvaa_cart"); 
       }
 
-      // Trigger the WhatsApp message
-      sendWhatsAppConfirmation(newOrder.id);
+      const shortOrderId = newOrder.id.split('-')[0].toUpperCase();
+
+      // --- SEND AUTOMATED EMAILJS RECEIPT ---
+      try {
+        const orderItemsHtml = checkoutItems.map((item: any) => `
+          <table style="width: 100%; border-collapse: collapse">
+            <tr style="vertical-align: top">
+              <td style="padding: 24px 8px 0 4px; display: inline-block; width: max-content">
+                <img style="height: 64px; width: 64px; object-fit: cover; border-radius: 4px;" src="${item.image}" alt="item" />
+              </td>
+              <td style="padding: 24px 8px 0 8px; width: 100%">
+                <div>${item.title || item.name}</div>
+                <div style="font-size: 14px; color: #888; padding-top: 4px">
+                  QTY: ${item.qty} ${item.size ? `| Size: ${item.size}` : ''}
+                </div>
+              </td>
+              <td style="padding: 24px 4px 0 0; white-space: nowrap">
+                <strong>₹${(item.price * item.qty).toLocaleString()}</strong>
+              </td>
+            </tr>
+          </table>
+        `).join('');
+
+        const templateParams = {
+          to_name: `${shippingInfo.firstName} ${shippingInfo.lastName}`,
+          to_email: contactInfo.email,
+          order_id: `#${shortOrderId}`,
+          order_items_html: orderItemsHtml, 
+          subtotal: `₹${subtotal.toLocaleString()}`,
+          shipping_fee: shipping === 0 ? "FREE" : `₹${shipping.toLocaleString()}`,
+          order_total: `₹${total.toLocaleString()}`,
+        };
+
+        
+        await emailjs.send(
+          import.meta.env.VITE_EMAILJS_SERVICE_ID, 
+          import.meta.env.VITE_EMAILJS_TEMPLATE_ID, 
+          templateParams, 
+          import.meta.env.VITE_EMAILJS_PUBLIC_KEY
+        );
+        console.log("Confirmation email sent successfully!");
+      } catch (emailError) {
+        console.error("Failed to send email confirmation:", emailError);
+      }
+
+      // --- GENERATE CLEAN WHATSAPP MESSAGE ---
+      const whatsappItemList = checkoutItems.map((item: any, index: number) => {
+        const productName = item.title || item.name || "Premium Jewelry Piece";
+        const sizeInfo = item.size ? ` (Size: ${item.size})` : "";
+        return `${index + 1}. *${productName}*${sizeInfo}\n    Qty: ${item.qty} × Rs.${item.price.toLocaleString()} = Rs.${(item.price * item.qty).toLocaleString()}`;
+      }).join('\n\n');
+
+      const businessWhatsApp = import.meta.env.VITE_BUSINESS_WHATSAPP;
+      const giftSection = showGiftMessage && giftMessage ? `*GIFT MESSAGE:*\n"${giftMessage}"\n\n` : "";
+
+      const rawMessage = `*New Order Request*
+
+Hello Sarvaa Fine Jewelry,
+I would like to place an order. Here are my details:
+
+*ORDER ID:* #${shortOrderId}
+----------------------------
+*ORDER SUMMARY:*
+
+${whatsappItemList}
+
+----------------------------
+*Subtotal:* Rs.${subtotal.toLocaleString()}
+*Shipping:* ${shipping === 0 ? "FREE" : `Rs.${shipping}`}
+*Grand Total:* *Rs.${total.toLocaleString()}*
+----------------------------
+
+${giftSection}*CUSTOMER DETAILS:*
+*Name:* ${shippingInfo.firstName} ${shippingInfo.lastName}
+*Phone:* +91 ${contactInfo.phone}
+
+*DELIVERY ADDRESS:*
+${shippingInfo.flat}, ${shippingInfo.street}
+${shippingInfo.city}, ${shippingInfo.state} - ${shippingInfo.pincode}
+
+Please let me know how to proceed with the payment. Thank you!`;
+
+      // encodeURIComponent fixes the # bug
+      const generatedLink = `https://wa.me/${businessWhatsApp}?text=${encodeURIComponent(rawMessage)}`;
+      setWhatsappLink(generatedLink);
       
       setOrderSuccess(true);
 
+      setTimeout(() => {
+        window.open(generatedLink, '_blank');
+      }, 800);
+
     } catch (error: any) {
       console.error("Order error:", error);
-      alert("Failed to place order. Please try again or check your cart items.");
+      alert(`Failed to place order: ${error.message || 'Please try again.'}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleFinish = () => {
-    navigate("/my-orders"); // Redirects directly to the tracking page
+    navigate("/my-orders"); 
   };
 
   return (
@@ -199,7 +269,6 @@ const CheckoutPage = () => {
 
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-16">
           
-          {/* LEFT COLUMN: FORMS */}
           <div className="lg:w-[55%] space-y-4">
             
             {/* STEP 1: CONTACT INFO */}
@@ -301,20 +370,9 @@ const CheckoutPage = () => {
                             <input required type="text" value={shippingInfo.state} onChange={(e) => setShippingInfo({...shippingInfo, state: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
                           </div>
                         </div>
-                        <div className="pt-4 pb-2 border-t border-gray-50">
-                            <label className="flex items-center gap-2 cursor-pointer mb-3">
-                                <input type="checkbox" checked={showGiftMessage} onChange={() => setShowGiftMessage(!showGiftMessage)} className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer" />
-                                <span className="text-sm text-gray-700 font-medium flex items-center gap-1.5"><Gift size={16} className="text-rose-500"/> Is this a gift?</span>
-                            </label>
-                            <AnimatePresence>
-                              {showGiftMessage && (
-                                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
-                                  <textarea placeholder="Type your gift message here (max 200 chars). We will print it on a beautiful card." value={giftMessage} onChange={(e) => setGiftMessage(e.target.value)} className="w-full border border-gray-200 bg-gray-50 rounded-lg p-3 text-sm focus:border-rose-500 outline-none h-24 resize-none mt-2" maxLength={200} />
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                        </div>
                       </div>
+                      <label className="flex items-center gap-2 cursor-pointer mt-6"><input type="checkbox" checked={showGiftMessage} onChange={() => setShowGiftMessage(!showGiftMessage)} className="text-rose-600 w-4 h-4" /><span className="text-sm font-medium">Is this a gift?</span></label>
+                      {showGiftMessage && <textarea placeholder="Gift Message" value={giftMessage} onChange={(e) => setGiftMessage(e.target.value)} className="w-full border border-gray-200 bg-gray-50 rounded-lg p-3 text-sm h-20 mt-2" />}
                       <div className="mt-8 flex justify-end">
                         <button type="submit" className="bg-gray-900 text-white px-8 py-3 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors cursor-pointer">Continue to Payment</button>
                       </div>
@@ -336,30 +394,54 @@ const CheckoutPage = () => {
                 {activeStep === 3 && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} className="overflow-hidden">
                     <div className="p-6 pt-0 border-t border-gray-50">
-                      <div className="space-y-3 mt-2">
-                        <label className={`block border rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === 'online' ? 'border-rose-600 bg-rose-50/50' : 'border-gray-200 hover:border-rose-200'}`}>
-                          <div className="flex items-start gap-3">
-                            <input type="radio" name="paymentMethod" value="online" checked={paymentMethod === 'online'} onChange={() => setPaymentMethod('online')} className="mt-1 w-4 h-4 text-rose-600 focus:ring-rose-500 cursor-pointer" />
+                      <div className="space-y-4 mt-2">
+                        
+                        <label className={`block border rounded-xl p-4 cursor-pointer transition-all border-green-600 bg-green-50/50 shadow-sm relative overflow-hidden`}>
+                          <div className="absolute top-0 right-0 bg-green-600 text-white text-[9px] font-bold px-2 py-1 uppercase tracking-widest rounded-bl-lg">Recommended</div>
+                          <div className="flex items-start gap-3 pt-1">
+                            <input type="radio" checked readOnly className="mt-1 w-4 h-4 text-green-600 focus:ring-green-500 cursor-pointer" />
                             <div className="flex-1">
-                              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2"><CreditCard size={18} className="text-gray-500" /> UPI / Cards / Wallets</h3>
-                              <p className="text-xs text-gray-500 mt-1">Pay securely online. Recommended.</p>
+                              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                <MessageCircle size={18} className="text-green-600" fill="currentColor" fillOpacity={0.2} /> 
+                                Order via WhatsApp
+                              </h3>
+                              <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                                Send your order details directly to our team via WhatsApp to finalize payment securely.
+                              </p>
                             </div>
                           </div>
                         </label>
-                        <label className={`block border rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === 'cod' ? 'border-rose-600 bg-rose-50/50' : 'border-gray-200 hover:border-rose-200'}`}>
+
+                        <label className={`block border rounded-xl p-4 cursor-not-allowed opacity-60 bg-gray-50 border-gray-200`}>
                           <div className="flex items-start gap-3">
-                            <input type="radio" name="paymentMethod" value="cod" checked={paymentMethod === 'cod'} onChange={() => setPaymentMethod('cod')} className="mt-1 w-4 h-4 text-rose-600 focus:ring-rose-500 cursor-pointer" />
+                            <input type="radio" disabled className="mt-1 w-4 h-4 text-gray-400" />
                             <div className="flex-1">
-                              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2"><Banknote size={18} className="text-gray-500" /> Cash on Delivery (COD)</h3>
-                              <p className="text-xs text-gray-500 mt-1">Pay with cash or UPI at your doorstep.</p>
-                              {paymentMethod === 'cod' && <p className="text-xs font-semibold text-rose-600 mt-2">Extra ₹50 handling charge applies.</p>}
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-bold text-gray-500 flex items-center gap-2"><CreditCard size={18} /> UPI / Cards / Wallets</h3>
+                                <span className="text-[9px] font-bold uppercase tracking-widest bg-gray-200 text-gray-600 px-2 py-1 rounded">Coming Soon</span>
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1">Direct online payment gateway integration is currently in progress.</p>
                             </div>
                           </div>
                         </label>
+
+                        <label className={`block border rounded-xl p-4 cursor-not-allowed opacity-60 bg-gray-50 border-gray-200`}>
+                          <div className="flex items-start gap-3">
+                            <input type="radio" disabled className="mt-1 w-4 h-4 text-gray-400" />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-bold text-gray-500 flex items-center gap-2"><Banknote size={18} /> Cash on Delivery</h3>
+                                <span className="text-[9px] font-bold uppercase tracking-widest bg-gray-200 text-gray-600 px-2 py-1 rounded">Coming Soon</span>
+                              </div>
+                              <p className="text-xs text-gray-400 mt-1">COD will be available shortly.</p>
+                            </div>
+                          </div>
+                        </label>
+
                       </div>
 
-                      <button onClick={handlePlaceOrder} disabled={isProcessing} className="w-full mt-8 bg-rose-600 text-white py-4 rounded-lg font-bold uppercase tracking-widest text-sm hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
-                        {isProcessing ? 'Processing Order...' : (paymentMethod === 'online' ? `Pay ₹${total.toLocaleString()} Securely` : 'Place Order')}
+                      <button onClick={handlePlaceOrder} disabled={isProcessing} className="w-full mt-8 bg-green-600 text-white py-4 rounded-lg font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
+                        {isProcessing ? 'Processing Order...' : `Order via WhatsApp (₹${total.toLocaleString()})`}
                       </button>
                     </div>
                   </motion.div>
@@ -378,10 +460,14 @@ const CheckoutPage = () => {
                       <div key={`${item.id}-${idx}`} className="flex gap-4 items-start">
                         <div className="w-20 h-24 bg-gray-50 rounded-lg overflow-hidden shrink-0 border border-gray-100"><img src={item.image} className="w-full h-full object-cover" /></div>
                         <div className="flex-1 pt-1">
-                          <h4 className="text-sm font-medium text-gray-900 line-clamp-2 leading-relaxed">{item.name}</h4>
+                          <h4 className="text-sm font-medium text-gray-900 line-clamp-2 leading-relaxed">{item.title || item.name}</h4>
                           <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-500">
-                             <span>Size: {item.size}</span>
-                             <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                             {item.size && (
+                               <>
+                                 <span>Size: {item.size}</span>
+                                 <span className="w-1 h-1 bg-gray-300 rounded-full" />
+                               </>
+                             )}
                              <span>Qty: {item.qty}</span>
                           </div>
                           <div className="flex items-center gap-2 mt-2">
@@ -398,7 +484,6 @@ const CheckoutPage = () => {
                         <div className="flex justify-between text-gray-600"><span>Total MRP</span><span>₹{totalMRP.toLocaleString()}</span></div>
                         {totalDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount on MRP</span><span>- ₹{totalDiscount.toLocaleString()}</span></div>}
                         <div className="flex justify-between text-gray-600"><span>Shipping</span><span className="text-green-600 font-medium">{shipping === 0 ? "FREE" : `₹${shipping}`}</span></div>
-                        {codCharge > 0 && <div className="flex justify-between text-rose-600"><span>COD Fee</span><span>₹{codCharge}</span></div>}
                         <div className="h-px bg-dashed border-t border-dashed border-gray-200 my-4" />
                         <div className="flex justify-between items-center">
                             <div className="flex flex-col"><span className="font-bold text-gray-900 text-base">Total Amount</span><span className="text-[10px] text-gray-400 font-medium">Inclusive of VAT/GST</span></div>
@@ -411,14 +496,35 @@ const CheckoutPage = () => {
         </div>
       </main>
 
+      {/* SUCCESS MODAL */}
       <AnimatePresence>
         {orderSuccess && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-8">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={32} className="text-green-600" /></div>
-              <h2 className="font-serif text-2xl text-gray-900 mb-2">Order Confirmed!</h2>
-              <p className="text-sm text-gray-500 mb-8">Thank you, {shippingInfo.firstName}. Your order has been placed successfully. We've sent a confirmation to your WhatsApp number +91 {contactInfo.phone}.</p>
-              <button onClick={handleFinish} className="w-full py-3.5 bg-gray-900 text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors cursor-pointer">Track My Order</button>
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle2 size={32} className="text-green-600" />
+              </div>
+              <h2 className="font-serif text-2xl text-gray-900 mb-2">Order Initiated!</h2>
+              <p className="text-sm text-gray-500 mb-6">
+                Thank you, {shippingInfo.firstName}. We have saved your order details. WhatsApp should open automatically to finalize your order.
+              </p>
+              
+              <div className="space-y-3">
+                <a 
+                  href={whatsappLink} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="w-full block py-3.5 bg-green-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-green-700 transition-colors"
+                >
+                  Open WhatsApp Manually
+                </a>
+                <button 
+                  onClick={handleFinish} 
+                  className="w-full py-3.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-gray-200 transition-colors"
+                >
+                  Go to My Orders
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
