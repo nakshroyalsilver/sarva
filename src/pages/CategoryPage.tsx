@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
+import { Helmet } from "react-helmet-async";
 import { useParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Filter, ChevronDown, SlidersHorizontal, ArrowUpDown, X, Frown } from "lucide-react";
-import Navbar from "@/components/layout/Navbar"; 
-import Footer from "@/components/layout/Footer"; 
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 import ProductCard from "@/components/ProductCard";
 import { supabase } from "../../supabase";
 
@@ -114,8 +115,52 @@ const CategoryPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans">
-      <Navbar />
+    <>
+      <Helmet>
+        <title>{categoryName ? `${categoryName} – Buy Online | Sarvaa` : "Shop Collections | Sarvaa"}</title>
+        <meta
+          name="description"
+          content={categoryName
+            ? `Shop ${categoryName.toLowerCase()} sterling silver jewelry. ${displayedProducts.length} exclusive designs. Free shipping on orders.`
+            : "Browse our exclusive collection of handcrafted 925 sterling silver jewelry."
+          }
+        />
+        <link rel="canonical" href={`https://sarvaa.com/category/${slug}`} />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={categoryName ? `${categoryName} – Buy Online | Sarvaa` : "Shop Collections | Sarvaa"} />
+        <meta property="og:description" content={categoryName ? `Shop ${categoryName.toLowerCase()} sterling silver jewelry. Free shipping.` : "Browse our exclusive collection."} />
+        <meta property="og:url" content={`https://sarvaa.com/category/${slug}`} />
+        <meta property="og:image" content="https://sarvaa.com/og-category.jpg" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={categoryName ? `${categoryName} – Buy Online | Sarvaa` : "Shop Collections | Sarvaa"} />
+        <meta name="twitter:description" content={categoryName ? `Shop ${categoryName.toLowerCase()} sterling silver jewelry.` : "Browse our exclusive collection."} />
+
+        {/* Breadcrumb Schema */}
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            {
+              "@type": "ListItem",
+              position: 1,
+              name: "Home",
+              item: "https://sarvaa.com"
+            },
+            {
+              "@type": "ListItem",
+              position: 2,
+              name: categoryName || "Collections",
+              item: `https://sarvaa.com/category/${slug}`
+            }
+          ]
+        })}</script>
+      </Helmet>
+      <div className="min-h-screen flex flex-col bg-white font-sans">
+        <Navbar />
 
       <main className="flex-grow pt-4 pb-20">
         <div className="container mx-auto px-4 lg:px-6 mb-6">
@@ -324,7 +369,8 @@ const CategoryPage = () => {
           </>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </>
   );
 };
 

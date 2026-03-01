@@ -1,4 +1,5 @@
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { Search, TrendingUp, FolderSearch, Sparkles, ArrowRight } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -45,8 +46,21 @@ const SearchPage = () => {
   const displayProducts = trendingProducts.slice(0, 3);
 
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans text-gray-900">
-      <Navbar />
+    <>
+      <Helmet>
+        <title>Search Jewelry | Sarvaa Sterling Silver</title>
+        <meta name="description" content="Search our complete collection of handcrafted 925 sterling silver jewelry. Rings, earrings, necklaces, bracelets, and more." />
+        <meta name="robots" content="noindex,follow" />
+        <link rel="canonical" href="https://sarvaa.com/search" />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="Search Jewelry | Sarvaa Sterling Silver" />
+        <meta property="og:description" content="Discover handcrafted 925 sterling silver jewelry. Search our complete collection." />
+        <meta property="og:url" content="https://sarvaa.com/search" />
+      </Helmet>
+      <div className="min-h-screen flex flex-col bg-white font-sans text-gray-900">
+        <Navbar />
 
       <main className="flex-grow container mx-auto px-6 py-12 max-w-5xl">
         
@@ -164,7 +178,8 @@ const SearchPage = () => {
       </main>
 
       <Footer />
-    </div>
+      </div>
+    </>
   );
 };
 

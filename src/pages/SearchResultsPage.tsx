@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
+import { Helmet } from "react-helmet-async";
 import { useSearchParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Filter, X, SlidersHorizontal, ArrowUpDown, ChevronDown, Frown } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import ProductCard from "@/components/ProductCard"; 
+import ProductCard from "@/components/ProductCard";
 import { products } from "@/data/products"; 
 
 const SearchResultsPage = () => {
@@ -27,8 +28,27 @@ const SearchResultsPage = () => {
   }, [query]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans">
-      <Navbar />
+    <>
+      <Helmet>
+        <title>{query ? `Search Results for "${query}" | Sarvaa` : "Search | Sarvaa"}</title>
+        <meta
+          name="description"
+          content={query
+            ? `Found ${displayProducts.length} results for "${query}". Browse our collection of handcrafted sterling silver jewelry.`
+            : "Search our collection of premium sterling silver jewelry."
+          }
+        />
+        <meta name="robots" content="noindex,follow" />
+        <link rel="canonical" href={`https://sarvaa.com/search${query ? `?q=${encodeURIComponent(query)}` : ""}`} />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={`Search Results for "${query}" | Sarvaa`} />
+        <meta property="og:description" content={`Found ${displayProducts.length} results. Shop handcrafted sterling silver jewelry.`} />
+        <meta property="og:url" content={`https://sarvaa.com/search${query ? `?q=${encodeURIComponent(query)}` : ""}`} />
+      </Helmet>
+      <div className="min-h-screen flex flex-col bg-white font-sans">
+        <Navbar />
 
       <main className="flex-grow pt-4 pb-20">
         
@@ -213,7 +233,8 @@ const SearchResultsPage = () => {
           </>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </>
   );
 };
 

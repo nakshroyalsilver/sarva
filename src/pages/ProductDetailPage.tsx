@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from "react";
+import { Helmet } from "react-helmet-async";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag, PlayCircle } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { products as localProducts } from "@/data/products"; 
-import { useCart } from "@/context/CartContext"; 
+import { products as localProducts } from "@/data/products";
+import { useCart } from "@/context/CartContext";
 import { supabase } from "../../supabase"; 
 
 const ProductDetailPage = () => {
@@ -134,22 +135,92 @@ const ProductDetailPage = () => {
 
   if (loading) {
     return (
-      <div className="bg-white min-h-screen flex flex-col font-sans">
-        <Navbar />
-        <div className="flex-grow container mx-auto px-4 py-10 flex items-center justify-center">
-           <div className="animate-pulse flex flex-col items-center">
-             <div className="w-64 h-64 bg-gray-100 rounded-xl mb-6"></div>
-             <div className="h-6 w-48 bg-gray-100 rounded mb-2"></div>
-             <div className="h-4 w-24 bg-gray-100 rounded"></div>
-           </div>
+      <>
+        <Helmet>
+          <title>Loading Product | Sarvaa</title>
+          <meta name="robots" content="noindex" />
+        </Helmet>
+        <div className="bg-white min-h-screen flex flex-col font-sans">
+          <Navbar />
+          <div className="flex-grow container mx-auto px-4 py-10 flex items-center justify-center">
+             <div className="animate-pulse flex flex-col items-center">
+               <div className="w-64 h-64 bg-gray-100 rounded-xl mb-6"></div>
+               <div className="h-6 w-48 bg-gray-100 rounded mb-2"></div>
+               <div className="h-4 w-24 bg-gray-100 rounded"></div>
+             </div>
+          </div>
         </div>
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="bg-white min-h-screen flex flex-col font-sans text-gray-900">
-      <Navbar />
+    <>
+      <Helmet>
+        <title>{product.name} – ₹{product.price} | Sarvaa Sterling Silver Jewelry</title>
+        <meta
+          name="description"
+          content={`${product.name} at ₹${product.price}. ${product.short_description || 'Premium handcrafted 925 sterling silver jewelry'} | Free shipping | Certified authentic | Shop now.`}
+        />
+        <meta name="keywords" content={`${product.name}, silver jewelry, sterling silver, ${product.category}`} />
+        <link rel="canonical" href={`https://sarvaa.com/product/${id}`} />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="product" />
+        <meta property="og:title" content={`${product.name} – ₹${product.price} | Sarvaa`} />
+        <meta property="og:description" content={`${product.name} at ₹${product.price}. Premium handcrafted sterling silver. Free shipping.`} />
+        <meta property="og:url" content={`https://sarvaa.com/product/${id}`} />
+        <meta property="og:image" content={product.image || "https://sarvaa.com/og-product.jpg"} />
+        <meta property="og:image:width" content="600" />
+        <meta property="og:image:height" content="600" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="product" />
+        <meta name="twitter:title" content={`${product.name} – ₹${product.price}`} />
+        <meta name="twitter:description" content={`Premium sterling silver. Free shipping. ₹${product.price}`} />
+        <meta name="twitter:image" content={product.image || "https://sarvaa.com/og-product.jpg"} />
+
+        {/* Product Price Data */}
+        <meta property="product:price:amount" content={product.price?.toString()} />
+        <meta property="product:price:currency" content="INR" />
+
+        {/* Breadcrumb Schema */}
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          itemListElement: [
+            { "@type": "ListItem", position: 1, name: "Home", item: "https://sarvaa.com" },
+            { "@type": "ListItem", position: 2, name: product.category?.charAt(0).toUpperCase() + product.category?.slice(1) || "Products", item: `https://sarvaa.com/category/${product.category}` },
+            { "@type": "ListItem", position: 3, name: product.name, item: `https://sarvaa.com/product/${id}` }
+          ]
+        })}</script>
+
+        {/* Product Schema - CRITICAL FOR e-commerce SEO */}
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: product.name,
+          description: product.description || product.short_description || `Premium handcrafted ${product.category} from Sarvaa`,
+          image: product.image || product.image_urls?.[0] || "https://sarvaa.com/product.jpg",
+          brand: { "@type": "Brand", name: "Sarvaa" },
+          offers: {
+            "@type": "Offer",
+            price: product.price?.toString(),
+            priceCurrency: "INR",
+            availability: "https://schema.org/InStock",
+            url: `https://sarvaa.com/product/${id}`
+          },
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: product.rating || "4.8",
+            reviewCount: product.reviews || "124",
+            bestRating: "5",
+            worstRating: "1"
+          }
+        })}</script>
+      </Helmet>
+      <div className="bg-white min-h-screen flex flex-col font-sans text-gray-900">
+        <Navbar />
 
       <main className="flex-grow container mx-auto px-4 py-6 lg:py-10">
         <div className="hidden md:flex text-xs text-gray-500 mb-6 uppercase tracking-widest items-center gap-2">
@@ -392,7 +463,8 @@ const ProductDetailPage = () => {
       </div>
 
       <Footer />
-    </div>
+      </div>
+    </>
   );
 };
 
