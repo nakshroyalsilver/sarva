@@ -49,7 +49,7 @@ const Navbar = () => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // --- NEW: DYNAMIC ANNOUNCEMENT BAR LOGIC ---
+  // --- DYNAMIC ANNOUNCEMENT BAR LOGIC ---
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [announcementIndex, setAnnouncementIndex] = useState(0);
 
@@ -68,12 +68,11 @@ const Navbar = () => {
     fetchAnnouncements();
   }, []);
 
-  // Sliding Logic for Announcements
   useEffect(() => {
-    if (announcements.length <= 1) return; // Don't slide if only 1
+    if (announcements.length <= 1) return; 
     const interval = setInterval(() => {
       setAnnouncementIndex((prev) => (prev + 1) % announcements.length);
-    }, 4000); // Changes every 4 seconds
+    }, 5000); 
     return () => clearInterval(interval);
   }, [announcements.length]);
   // ------------------------------------------
@@ -185,16 +184,15 @@ const Navbar = () => {
     <>
       <header className="sticky top-0 z-50 bg-white border-b border-gray-200 font-sans">
         
-        {/* --- DYNAMIC ANNOUNCEMENT BAR --- */}
-        <div className="bg-gradient-to-r from-rose-50 via-[#FFF0F5] to-rose-50 text-rose-950 text-center text-[10px] tracking-wider font-medium border-b border-rose-100 overflow-hidden relative h-[28px] flex items-center justify-center">
+        <div className="bg-gradient-to-r from-rose-50 via-[#FFF0F5] to-rose-50 text-rose-950 text-center text-xs sm:text-sm tracking-widest font-bold border-b border-rose-100 overflow-hidden relative h-10 flex items-center justify-center">
           <AnimatePresence mode="wait">
             {announcements.length > 0 ? (
               <motion.div
                 key={announcementIndex}
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -20, opacity: 0 }}
-                transition={{ duration: 0.5, ease: "easeInOut" }}
+                initial={{ x: -100, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 100, opacity: 0 }}
+                transition={{ duration: 0.9, ease: "easeInOut" }}
                 className="absolute w-full"
               >
                 {announcements[announcementIndex].message}
@@ -210,24 +208,24 @@ const Navbar = () => {
         <div className="container mx-auto px-6 relative z-30 bg-white">
           <div className="flex lg:hidden items-center justify-between h-14">
             <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-gray-800 p-1">
-              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+              {mobileMenuOpen ? <X size={24} strokeWidth={1.5} /> : <Menu size={24} strokeWidth={1.5} />}
             </button>
             <Link to="/" className="absolute left-1/2 transform -translate-x-1/2">
-              <h1 className="text-xl font-serif tracking-widest text-gray-900">Sarvaa</h1>
+              <h1 className="text-2xl font-serif tracking-widest text-gray-900">Sarvaa</h1>
             </Link>
-            <div className="flex items-center gap-2">
-              <Link to="/wishlist"><Heart size={20} /></Link>
+            <div className="flex items-center gap-3">
+              <Link to="/wishlist"><Heart size={22} strokeWidth={1.5} /></Link>
               <Link to="/cart" className="relative">
-                <ShoppingBag size={20} />
-                {cartCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">{cartCount}</span>}
+                <ShoppingBag size={22} strokeWidth={1.5} />
+                {cartCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{cartCount}</span>}
               </Link>
             </div>
           </div>
 
-          <div className="hidden lg:flex items-center justify-between h-16 gap-6">
-            <div className="w-64 flex-shrink-0">
+          <div className="hidden lg:flex items-center justify-between h-20 gap-6">
+            <div className="w-56 flex-shrink-0">
               <Link to="/" className="inline-block">
-                <h1 className="text-2xl font-serif tracking-[0.3em] text-gray-900 font-medium hover:opacity-80 transition-opacity">
+                <h1 className="text-3xl font-serif tracking-[0.3em] text-gray-900 font-medium hover:opacity-80 transition-opacity">
                   Sarvaa
                 </h1>
               </Link>
@@ -237,9 +235,9 @@ const Navbar = () => {
               <div className="w-full max-w-xl relative">
                 <form 
                   onSubmit={handleSearchSubmit}
-                  className={`w-full h-10 bg-gray-50 rounded-full border flex items-center overflow-hidden relative transition-all z-50 ${isSearchFocused ? 'border-rose-500 bg-white shadow-md ring-4 ring-rose-50' : 'border-gray-300'}`}
+                  className={`w-full h-11 bg-gray-50 rounded-full border flex items-center overflow-hidden relative transition-all z-50 ${isSearchFocused ? 'border-rose-500 bg-white shadow-md ring-4 ring-rose-50' : 'border-gray-300'}`}
                 >
-                  <div className="absolute inset-0 flex items-center pl-4 pointer-events-none">
+                  <div className="absolute inset-0 flex items-center pl-5 pointer-events-none">
                     <AnimatePresence mode="wait">
                       {!searchQuery && !isSearchFocused && (
                         <motion.span
@@ -257,11 +255,11 @@ const Navbar = () => {
                     value={searchQuery}
                     onFocus={() => setIsSearchFocused(true)}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-full pl-4 pr-11 bg-transparent text-gray-900 text-sm outline-none relative z-10 placeholder-transparent font-medium"
+                    className="w-full h-full pl-5 pr-12 bg-transparent text-gray-900 text-sm outline-none relative z-10 placeholder-transparent font-medium"
                     placeholder={isSearchFocused ? "Search for rings, earrings, diamonds..." : ""}
                   />
-                  <button type="submit" className="absolute right-0.5 w-9 h-9 bg-rose-500 rounded-full flex items-center justify-center text-white hover:bg-rose-600 transition-all z-20">
-                    <Search size={15} />
+                  <button type="submit" className="absolute right-1 w-9 h-9 bg-rose-500 rounded-full flex items-center justify-center text-white hover:bg-rose-600 transition-all z-20 cursor-pointer">
+                    <Search size={16} strokeWidth={2} />
                   </button>
                 </form>
 
@@ -285,7 +283,7 @@ const Navbar = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleSearchSubmit(undefined, "/")} 
-                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors flex items-center gap-3"
+                                  className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors flex items-center gap-3 cursor-pointer"
                                 >
                                   <Search size={12} className="text-gray-300" />
                                   {searchQuery ? (
@@ -310,7 +308,7 @@ const Navbar = () => {
                                 key={idx}
                                 type="button"
                                 onClick={() => handleSearchSubmit(undefined, cat.path)} 
-                                className="px-3 py-1.5 bg-gray-50 border border-gray-100 hover:border-rose-200 text-xs font-semibold text-gray-600 hover:text-rose-600 rounded-lg transition-colors"
+                                className="px-3 py-1.5 bg-gray-50 border border-gray-100 hover:border-rose-200 text-xs font-semibold text-gray-600 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
                               >
                                 {cat.name}
                               </button>
@@ -332,7 +330,7 @@ const Navbar = () => {
                               <button 
                                 key={product.id}
                                 onClick={() => handleSearchSubmit(undefined, "/")} 
-                                className="w-full flex items-center gap-4 group text-left px-2 py-1.5 hover:bg-rose-50 rounded-xl transition-colors"
+                                className="w-full flex items-center gap-4 group text-left px-2 py-1.5 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                               >
                                 <div className="w-12 h-12 rounded-lg bg-gray-50 overflow-hidden border border-gray-100 flex-shrink-0">
                                   <img src={product.img} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
@@ -356,18 +354,31 @@ const Navbar = () => {
               </div>
             </div>
 
-            <div className="w-64 flex-shrink-0 flex items-center justify-end gap-4">
-              <button onClick={() => setIsLocationModalOpen(true)} className="flex items-center gap-1 hover:text-rose-600 transition-colors group">
-                <MapPin size={14} className="text-gray-600 group-hover:text-rose-600" />
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tight group-hover:text-rose-600">
-                  {pincode !== "Select Location" ? `Deliver to: ${pincode}` : pincode}
-                </span>
+            {/* --- UPGRADED DESKTOP DELIVER TO & ICONS --- */}
+            <div className="w-auto flex-shrink-0 flex items-center justify-end gap-6">
+              
+              <button 
+                onClick={() => setIsLocationModalOpen(true)} 
+                className="flex items-center gap-2 hover:bg-rose-50 px-2.5 py-1.5 rounded-xl transition-colors group cursor-pointer border border-transparent hover:border-rose-100"
+              >
+                <div className="text-gray-500 group-hover:text-rose-600 transition-colors">
+                  <MapPin size={22} strokeWidth={1.5} />
+                </div>
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none mb-1">Deliver to</span>
+                  <span className="text-[13px] font-bold text-gray-900 group-hover:text-rose-700 leading-none">
+                    {pincode !== "Select Location" ? pincode : "Select Pincode"}
+                  </span>
+                </div>
+                <ChevronDown size={14} className="text-gray-400 group-hover:text-rose-600 mt-3" />
               </button>
 
-              <div className="flex items-center gap-3.5">
+              <div className="w-px h-8 bg-gray-200 mx-1"></div>
+
+              <div className="flex items-center gap-5">
                 {user ? (
                   <div className="group relative flex items-center gap-1 cursor-pointer py-2">
-                    <div className="w-7 h-7 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center text-xs font-bold uppercase border border-rose-200 transition-colors group-hover:bg-rose-600 group-hover:text-white">
+                    <div className="w-8 h-8 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center text-sm font-bold uppercase border border-rose-200 transition-colors group-hover:bg-rose-600 group-hover:text-white">
                       {user.name.charAt(0)}
                     </div>
                     <div className="absolute top-full right-0 w-48 bg-white border border-gray-100 shadow-xl rounded-lg py-2 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 translate-y-2 group-hover:translate-y-0">
@@ -376,21 +387,21 @@ const Navbar = () => {
                         <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
                       </div>
                       <Link to="/my-orders" className="block px-4 py-2 text-xs font-medium text-gray-600 hover:bg-rose-50 hover:text-rose-600">My Orders</Link>
-                      <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border-t border-gray-50 mt-1 pt-3">Logout</button>
+                      <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border-t border-gray-50 mt-1 pt-3 cursor-pointer">Logout</button>
                     </div>
                   </div>
                 ) : (
                   <Link to="/login" className="text-gray-700 hover:text-rose-600 transition-colors">
-                    <User size={20} strokeWidth={1.8} />
+                    <User size={24} strokeWidth={1.5} />
                   </Link>
                 )}
                 <Link to="/wishlist" className="text-gray-700 hover:text-rose-600 transition-colors relative">
-                  <Heart size={20} strokeWidth={1.8} />
-                  {wishlistCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">{wishlistCount}</span>}
+                  <Heart size={24} strokeWidth={1.5} />
+                  {wishlistCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-sm">{wishlistCount}</span>}
                 </Link>
                 <Link to="/cart" className="text-gray-700 hover:text-rose-600 transition-colors relative">
-                  <ShoppingBag size={20} strokeWidth={1.8} />
-                  {cartCount > 0 && <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold">{cartCount}</span>}
+                  <ShoppingBag size={24} strokeWidth={1.5} />
+                  {cartCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold shadow-sm">{cartCount}</span>}
                 </Link>
               </div>
             </div>
@@ -398,14 +409,14 @@ const Navbar = () => {
         </div>
 
         <nav className="hidden lg:block border-t border-gray-200 relative bg-white z-10" onMouseLeave={() => setActiveCategory(null)}>
-          <div className="container mx-auto px-6 flex items-center justify-center h-11">
+          <div className="container mx-auto px-6 flex items-center justify-center h-12">
             <ul className="flex items-center gap-8">
               {navCategories.map((cat) => (
-                <li key={cat.path} className="h-11 flex items-center" onMouseEnter={() => setActiveCategory(cat.name)}>
-                  <Link to={cat.path} className={`text-[11px] uppercase tracking-wider font-bold transition-all duration-200 hover:text-rose-600 relative py-3 flex items-center gap-0.5 group ${cat.highlight ? "text-rose-600" : "text-gray-700"}`}>
+                <li key={cat.path} className="h-12 flex items-center" onMouseEnter={() => setActiveCategory(cat.name)}>
+                  <Link to={cat.path} className={`text-xs uppercase tracking-wider font-bold transition-all duration-200 hover:text-rose-600 relative py-3 flex items-center gap-0.5 group ${cat.highlight ? "text-rose-600" : "text-gray-700"}`}>
                     {cat.name}
                     <span className="absolute bottom-0 left-0 w-0 h-[2px] bg-rose-500 group-hover:w-full transition-all duration-200 ease-out" />
-                    {cat.subCats && <ChevronDown size={11} className={`transition-transform duration-200 text-gray-400 group-hover:text-rose-600 ${activeCategory === cat.name ? "rotate-180" : ""}`} />}
+                    {cat.subCats && <ChevronDown size={12} className={`transition-transform duration-200 text-gray-400 group-hover:text-rose-600 ${activeCategory === cat.name ? "rotate-180" : ""}`} />}
                   </Link>
                 </li>
               ))}
@@ -460,7 +471,7 @@ const Navbar = () => {
                          <p className="text-sm font-bold text-gray-900">{user.name}</p>
                        </div>
                     </div>
-                    <button onClick={handleLogout} className="text-xs font-bold text-rose-600 px-3 py-1.5 bg-rose-50 rounded-md hover:bg-rose-100">Logout</button>
+                    <button onClick={handleLogout} className="text-xs font-bold text-rose-600 px-3 py-1.5 bg-rose-50 rounded-md hover:bg-rose-100 cursor-pointer">Logout</button>
                   </div>
                   <Link to="/my-orders" onClick={() => setMobileMenuOpen(false)} className="block px-6 py-3.5 bg-gray-50 border-b border-gray-100 text-sm font-bold text-gray-700 hover:text-rose-600 flex items-center justify-between">
                     <span className="flex items-center gap-2"><Package size={16} className="text-rose-500"/> Track My Orders</span>
@@ -473,13 +484,20 @@ const Navbar = () => {
                 </div>
               )}
               
-              <div className="bg-white p-4 flex items-center gap-3 border-b border-gray-100 cursor-pointer" onClick={() => setIsLocationModalOpen(true)}>
-                  <MapPin size={20} className="text-gray-600" />
-                  <div className="flex flex-col">
-                    <span className="text-xs text-gray-500">Deliver to</span>
-                    <span className="text-sm font-bold text-gray-900">{pincode !== "Select Location" ? `India ${pincode}` : pincode}</span>
+              {/* --- UPGRADED MOBILE DELIVER TO --- */}
+              <div className="bg-gray-50 mx-4 my-4 rounded-xl p-3.5 flex items-center justify-between border border-gray-200 cursor-pointer active:bg-gray-100 transition-colors" onClick={() => setIsLocationModalOpen(true)}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm text-gray-600 border border-gray-100">
+                      <MapPin size={20} strokeWidth={1.5} />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] uppercase font-bold text-gray-400 tracking-wider mb-0.5">Delivery Location</span>
+                      <span className="text-sm font-extrabold text-gray-900">{pincode !== "Select Location" ? pincode : "Select Pincode"}</span>
+                    </div>
                   </div>
+                  <span className="text-xs font-bold text-rose-600 uppercase tracking-widest bg-rose-50 px-3 py-1.5 rounded-lg">Change</span>
               </div>
+
               <div className="flex flex-col p-6 space-y-2">
                 {navCategories.map((cat) => (
                   <div key={cat.path} className="border-b border-gray-50 last:border-none">
@@ -495,30 +513,36 @@ const Navbar = () => {
         </AnimatePresence>
       </header>
 
+      {/* --- UPGRADED MODAL --- */}
       <AnimatePresence>
         {isLocationModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsLocationModalOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden text-center">
-              <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                <h3 className="font-serif text-lg font-medium text-gray-900">Choose location</h3>
-                <button onClick={() => setIsLocationModalOpen(false)} className="text-gray-400 hover:text-gray-600"><XCircle size={24} /></button>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsLocationModalOpen(false)} className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden text-center">
+              
+              <div className="absolute top-4 right-4">
+                <button onClick={() => setIsLocationModalOpen(false)} className="text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-full p-1 transition-colors cursor-pointer"><X size={20} strokeWidth={2.5}/></button>
               </div>
-              <div className="p-8">
-                <MapPin size={32} className="text-rose-500 mx-auto mb-4" />
-                <p className="text-gray-500 text-sm mb-6">Select a delivery location to see product availability.</p>
+
+              <div className="p-8 pt-10 text-center">
+                <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-5">
+                  <MapPin size={28} className="text-rose-600" strokeWidth={1.5} />
+                </div>
+                <h4 className="font-serif text-2xl text-gray-900 mb-2">Where are we shipping?</h4>
+                <p className="text-gray-500 text-xs mb-8 px-4 leading-relaxed">Enter your pincode to check estimated delivery times and product availability.</p>
+                
                 <form onSubmit={handleLocationUpdate}>
-                  <div className="flex gap-2">
+                  <div className="flex bg-gray-50 border border-gray-200 rounded-xl p-1.5 focus-within:border-rose-400 focus-within:ring-4 focus-within:ring-rose-50 transition-all">
                     <input 
                       type="text" 
-                      placeholder="Enter Pincode" 
+                      placeholder="Enter 6-digit Pincode" 
                       maxLength={6} 
-                      className="flex-1 border border-gray-300 rounded-md px-4 py-2 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500" 
+                      className="flex-1 bg-transparent px-4 py-2.5 text-sm font-bold text-gray-900 tracking-widest outline-none placeholder:font-medium placeholder:tracking-normal" 
                       value={tempPincode} 
                       onChange={(e) => setTempPincode(e.target.value.replace(/\D/g, ''))} 
                       autoFocus 
                     />
-                    <button type="submit" disabled={tempPincode.length !== 6} className="bg-rose-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-rose-700 disabled:bg-gray-300 transition-colors">Apply</button>
+                    <button type="submit" disabled={tempPincode.length !== 6} className="bg-rose-600 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-rose-700 disabled:bg-gray-300 disabled:text-gray-500 transition-colors cursor-pointer shadow-md">Apply</button>
                   </div>
                 </form>
               </div>

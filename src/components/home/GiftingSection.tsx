@@ -87,18 +87,8 @@ const GiftingSection = () => {
           ))}
         </div>
 
-        {/* "Shop by Price" Mini Links */}
-        <div className="mt-12 flex flex-wrap justify-center gap-4">
-           {["Under ₹999", "₹1000 - ₹2999", "Premium Gifts"].map((tag) => (
-             <Link 
-               key={tag} 
-               to={`/search?q=${tag}`} 
-               className="px-6 py-2.5 bg-white border border-rose-100 text-rose-900 rounded-full text-xs font-bold uppercase tracking-widest hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all shadow-sm"
-             >
-               Gifts {tag}
-             </Link>
-           ))}
-        </div>
+        
+        
 
       </div>
     </section>

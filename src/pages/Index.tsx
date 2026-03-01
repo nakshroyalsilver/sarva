@@ -3,7 +3,7 @@ import Footer from "@/components/layout/Footer";
 import HeroSection from "@/components/home/HeroSection";
 import CategoryShowcase from "@/components/home/CategoryShowcase";
 
-import NewArrivals from "@/components/home/NewArrivals";
+
 import GiftingSection from "@/components/home/GiftingSection";
 
 import WhyChooseUs from "@/components/home/WhyChooseUs";
@@ -21,7 +21,7 @@ const Index = () => {
         <CategoryShowcase />
        
         <StylingCarousel />
-        <NewArrivals />
+       
         <ShopByPrice />
         <GiftingSection />
         <Testimonials />
