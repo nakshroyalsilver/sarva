@@ -319,7 +319,7 @@ Please let me know how to proceed with the payment. Thank you!`;
               </AnimatePresence>
             </div>
 
-            {/* STEP 2: SHIPPING ADDRESS */}
+            {/* SHIPPING ADDRESS */}
             <div className={`bg-white rounded-xl border transition-colors ${activeStep === 2 ? "border-rose-200 shadow-sm" : "border-gray-100"} ${activeStep < 2 ? "opacity-60" : ""}`}>
               <button onClick={() => activeStep > 2 && setActiveStep(2)} disabled={activeStep < 2} className={`w-full flex items-center justify-between p-6 ${activeStep >= 2 ? "cursor-pointer" : "cursor-not-allowed"}`}>
                 <h2 className="font-bold text-gray-800 text-sm uppercase tracking-wider flex items-center gap-3">
