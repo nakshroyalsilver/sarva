@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, Navigate, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ShieldCheck, CreditCard, Gift, Check, Banknote, ShoppingBag, CheckCircle2, MessageCircle } from "lucide-react";
+import { ArrowLeft, ShieldCheck, CreditCard, Gift, Check, Banknote, ShoppingBag, CheckCircle2, MessageCircle, X, Tag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -13,23 +13,70 @@ const CheckoutPage = () => {
   const navigate = useNavigate();
   const { cartItems } = useCart();
   
-  // 1: Contact, 2: Shipping, 3: Payment
-  const [activeStep, setActiveStep] = useState(1);
+  // --- PERSISTENT CHECKOUT DRAFT LOGIC ---
+  const [activeStep, setActiveStep] = useState(() => {
+    const saved = localStorage.getItem("checkout_step");
+    return saved ? Number(saved) : 1;
+  });
   
-  // Default contact
-  const [contactInfo, setContactInfo] = useState({ 
-    phone: "8780791994", 
-    email: "" 
+  const [contactInfo, setContactInfo] = useState(() => {
+    const saved = localStorage.getItem("checkout_contact");
+    if (saved) return JSON.parse(saved);
+    
+    const storedUser = localStorage.getItem("currentUser");
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser);
+      return { phone: "", email: parsedUser.email || "" };
+    }
+    return { phone: "", email: "" };
   });
 
-  const [shippingInfo, setShippingInfo] = useState({
-    firstName: "", lastName: "", flat: "", street: "", pincode: "", city: "", state: ""
+  const [shippingInfo, setShippingInfo] = useState(() => {
+    const saved = localStorage.getItem("checkout_shipping");
+    if (saved) return JSON.parse(saved);
+
+    const storedUser = localStorage.getItem("currentUser");
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser);
+      return {
+        firstName: parsedUser.name?.split(' ')[0] || "",
+        lastName: parsedUser.name?.split(' ').slice(1).join(' ') || "",
+        flat: "", street: "", pincode: "", city: "", state: ""
+      };
+    }
+    return { firstName: "", lastName: "", flat: "", street: "", pincode: "", city: "", state: "" };
   });
+
+  // NEW: Save the applied coupon to local storage
+  const [appliedCoupon, setAppliedCoupon] = useState<any | null>(() => {
+    const saved = localStorage.getItem("checkout_coupon");
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // Auto-save changes to localStorage as they type
+  useEffect(() => {
+    localStorage.setItem("checkout_step", activeStep.toString());
+  }, [activeStep]);
+
+  useEffect(() => {
+    localStorage.setItem("checkout_contact", JSON.stringify(contactInfo));
+  }, [contactInfo]);
+
+  useEffect(() => {
+    localStorage.setItem("checkout_shipping", JSON.stringify(shippingInfo));
+  }, [shippingInfo]);
+
+  useEffect(() => {
+    if (appliedCoupon) {
+      localStorage.setItem("checkout_coupon", JSON.stringify(appliedCoupon));
+    } else {
+      localStorage.removeItem("checkout_coupon");
+    }
+  }, [appliedCoupon]);
+  // ---------------------------------------
   
   const [showGiftMessage, setShowGiftMessage] = useState(false);
   const [giftMessage, setGiftMessage] = useState("");
-  
-  // Default is whatsapp
   const [paymentMethod, setPaymentMethod] = useState<"whatsapp" | "online" | "cod">("whatsapp");
 
   // Processing & Success States
@@ -37,21 +84,24 @@ const CheckoutPage = () => {
   const [orderSuccess, setOrderSuccess] = useState(false);
   const [whatsappLink, setWhatsappLink] = useState("");
 
-  // --- AUTO-FILL LOGGED-IN USER DATA ---
+  const [couponInput, setCouponInput] = useState("");
+  const [couponError, setCouponError] = useState("");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [availableCoupons, setAvailableCoupons] = useState<any[]>([]);
+
   useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
-      setContactInfo((prev) => ({ 
-        ...prev, 
-        email: parsedUser.email 
-      }));
-      setShippingInfo((prev) => ({
-        ...prev,
-        firstName: parsedUser.name?.split(' ')[0] || "",
-        lastName: parsedUser.name?.split(' ').slice(1).join(' ') || ""
-      }));
-    }
+    const fetchActiveCoupons = async () => {
+      const { data, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setAvailableCoupons(data);
+      }
+    };
+    fetchActiveCoupons();
   }, []);
 
   const checkoutItems = state?.directPurchase 
@@ -62,13 +112,79 @@ const CheckoutPage = () => {
     return <Navigate to="/cart" />;
   }
 
-  const subtotal = checkoutItems.reduce((acc: number, item: any) => acc + (item.price * item.qty), 0);
-  const totalMRP = checkoutItems.reduce((acc: number, item: any) => acc + ((item.originalPrice || item.price) * item.qty), 0);
-  const totalDiscount = totalMRP - subtotal;
+  // ==========================================
+  // --- STRICT PRICING MATH LOGIC ---
+  // ==========================================
+  const subtotal = checkoutItems.reduce((acc: number, item: any) => acc + (Number(item.price) * Number(item.qty)), 0);
   
-  const shipping = subtotal > 999 ? 0 : 99;
-  const total = subtotal + shipping;
+  // NEW: Safety check if they removed items and cart is now too low for the saved coupon
+  useEffect(() => {
+    if (appliedCoupon && subtotal < Number(appliedCoupon.min_order_value)) {
+      setAppliedCoupon(null);
+      setCouponError(`Coupon ${appliedCoupon.code} removed because your total dropped below ₹${appliedCoupon.min_order_value}.`);
+    }
+  }, [subtotal, appliedCoupon]);
 
+  let couponDiscountAmount = 0;
+  if (appliedCoupon) {
+    if (appliedCoupon.discount_type === 'percentage') {
+      couponDiscountAmount = subtotal * (Number(appliedCoupon.discount_value) / 100);
+    } else {
+      couponDiscountAmount = Number(appliedCoupon.discount_value);
+    }
+    if (couponDiscountAmount > subtotal) couponDiscountAmount = subtotal;
+  }
+
+  const subtotalAfterCoupon = subtotal - couponDiscountAmount;
+  
+  const shipping = subtotalAfterCoupon >= 5000 ? 0 : 99; 
+  const amountNeededForFreeShipping = 5000 - subtotalAfterCoupon;
+
+  const total = subtotalAfterCoupon + shipping;
+  // ==========================================
+
+  // --- COUPON HANDLERS ---
+  const handleApplyCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponInput.trim()) return;
+    
+    setIsApplyingCoupon(true);
+    setCouponError("");
+    
+    try {
+      const { data, error } = await supabase
+        .from('coupons')
+        .select('*')
+        .ilike('code', couponInput.trim())
+        .eq('is_active', true)
+        .single();
+
+      if (error || !data) {
+        setCouponError("Invalid or expired coupon code.");
+        setIsApplyingCoupon(false);
+        return;
+      }
+
+      if (subtotal < Number(data.min_order_value)) {
+        setCouponError(`Add ₹${Number(data.min_order_value) - subtotal} more to use this coupon.`);
+        setIsApplyingCoupon(false);
+        return;
+      }
+
+      setAppliedCoupon(data);
+      setCouponInput("");
+    } catch (err) {
+      setCouponError("Error applying coupon. Please try again.");
+    }
+    setIsApplyingCoupon(false);
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError("");
+  };
+
+  // --- NAVIGATION HANDLERS ---
   const handleBack = () => {
     if (state?.directPurchase) navigate(-1);
     else navigate("/cart");
@@ -96,9 +212,7 @@ const CheckoutPage = () => {
     setIsProcessing(true);
 
     try {
-      // 1. SAFETY CHECK
       const isValidUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
-      
       const hasFakeProducts = checkoutItems.some((item: any) => !isValidUUID(item.id));
       if (hasFakeProducts) {
         alert("Wait! You have old test products in your cart. Please go back, clear your cart, and add real products from the live store.");
@@ -106,7 +220,6 @@ const CheckoutPage = () => {
         return; 
       }
 
-      // Step 2: Insert the main Order record
       const orderPayload = {
         total_amount: total,
         status: 'Pending WhatsApp',
@@ -114,7 +227,8 @@ const CheckoutPage = () => {
         customer_email: contactInfo.email,
         shipping_address: shippingInfo,
         subtotal: subtotal,
-        discount: totalDiscount,
+        discount: couponDiscountAmount, 
+        coupon_code: appliedCoupon ? appliedCoupon.code : null,
         shipping_fee: shipping,
         cod_charge: 0,
         payment_method: paymentMethod,
@@ -129,7 +243,6 @@ const CheckoutPage = () => {
 
       if (orderError) throw orderError;
 
-      // Step 3: Map & Insert cart items 
       const orderItemsPayload = checkoutItems.map((item: any) => ({
         order_id: newOrder.id,
         product_id: item.id,
@@ -141,10 +254,14 @@ const CheckoutPage = () => {
       const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
       if (itemsError) throw itemsError;
 
-      // Step 4: Clear Cart
+      // CLEAR THE CART AND CHECKOUT DRAFT ON SUCCESS
       if (!state?.directPurchase) {
         localStorage.removeItem("sarvaa_cart"); 
       }
+      localStorage.removeItem("checkout_contact");
+      localStorage.removeItem("checkout_shipping");
+      localStorage.removeItem("checkout_step");
+      localStorage.removeItem("checkout_coupon"); // NEW: Clear coupon memory on success
 
       const shortOrderId = newOrder.id.split('-')[0].toUpperCase();
 
@@ -169,16 +286,23 @@ const CheckoutPage = () => {
           </table>
         `).join('');
 
+        const emailCouponRow = appliedCoupon ? `
+        <tr>
+          <td style="width: 60%"></td>
+          <td>Coupon (${appliedCoupon.code})</td>
+          <td style="padding: 8px; white-space: nowrap; color: #16a34a;">- ₹${couponDiscountAmount.toLocaleString()}</td>
+        </tr>
+        ` : '';
+
         const templateParams = {
           to_name: `${shippingInfo.firstName} ${shippingInfo.lastName}`,
           to_email: contactInfo.email,
           order_id: `#${shortOrderId}`,
-          order_items_html: orderItemsHtml, 
+          order_items_html: orderItemsHtml + emailCouponRow, 
           subtotal: `₹${subtotal.toLocaleString()}`,
           shipping_fee: shipping === 0 ? "FREE" : `₹${shipping.toLocaleString()}`,
           order_total: `₹${total.toLocaleString()}`,
         };
-
         
         await emailjs.send(
           import.meta.env.VITE_EMAILJS_SERVICE_ID, 
@@ -186,7 +310,6 @@ const CheckoutPage = () => {
           templateParams, 
           import.meta.env.VITE_EMAILJS_PUBLIC_KEY
         );
-        console.log("Confirmation email sent successfully!");
       } catch (emailError) {
         console.error("Failed to send email confirmation:", emailError);
       }
@@ -200,6 +323,8 @@ const CheckoutPage = () => {
 
       const businessWhatsApp = import.meta.env.VITE_BUSINESS_WHATSAPP;
       const giftSection = showGiftMessage && giftMessage ? `*GIFT MESSAGE:*\n"${giftMessage}"\n\n` : "";
+      
+      const whatsappCouponLine = appliedCoupon ? `*Coupon (${appliedCoupon.code}):* -Rs.${couponDiscountAmount.toLocaleString()}\n` : "";
 
       const rawMessage = `*New Order Request*
 
@@ -214,7 +339,7 @@ ${whatsappItemList}
 
 ----------------------------
 *Subtotal:* Rs.${subtotal.toLocaleString()}
-*Shipping:* ${shipping === 0 ? "FREE" : `Rs.${shipping}`}
+${whatsappCouponLine}*Shipping:* ${shipping === 0 ? "FREE" : `Rs.${shipping}`}
 *Grand Total:* *Rs.${total.toLocaleString()}*
 ----------------------------
 
@@ -228,7 +353,6 @@ ${shippingInfo.city}, ${shippingInfo.state} - ${shippingInfo.pincode}
 
 Please let me know how to proceed with the payment. Thank you!`;
 
-      // encodeURIComponent fixes the # bug
       const generatedLink = `https://wa.me/${businessWhatsApp}?text=${encodeURIComponent(rawMessage)}`;
       setWhatsappLink(generatedLink);
       
@@ -269,6 +393,7 @@ Please let me know how to proceed with the payment. Thank you!`;
 
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-16">
           
+          {/* LEFT COLUMN: FORMS */}
           <div className="lg:w-[55%] space-y-4">
             
             {/* STEP 1: CONTACT INFO */}
@@ -319,7 +444,7 @@ Please let me know how to proceed with the payment. Thank you!`;
               </AnimatePresence>
             </div>
 
-            {/* SHIPPING ADDRESS */}
+            {/* STEP 2: SHIPPING ADDRESS */}
             <div className={`bg-white rounded-xl border transition-colors ${activeStep === 2 ? "border-rose-200 shadow-sm" : "border-gray-100"} ${activeStep < 2 ? "opacity-60" : ""}`}>
               <button onClick={() => activeStep > 2 && setActiveStep(2)} disabled={activeStep < 2} className={`w-full flex items-center justify-between p-6 ${activeStep >= 2 ? "cursor-pointer" : "cursor-not-allowed"}`}>
                 <h2 className="font-bold text-gray-800 text-sm uppercase tracking-wider flex items-center gap-3">
@@ -450,9 +575,11 @@ Please let me know how to proceed with the payment. Thank you!`;
             </div>
           </div>
 
-          {/* RIGHT COLUMN: ORDER SUMMARY */}
+          {/* RIGHT COLUMN: ORDER SUMMARY & COUPONS */}
           <div className="lg:w-[45%]">
             <div className="sticky top-28 space-y-6">
+                
+                {/* CART ITEMS SUMMARY */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <h3 className="font-serif text-lg text-gray-900 mb-6 pb-4 border-b border-gray-50 flex items-center gap-2"><ShoppingBag size={18} className="text-rose-600" /> Order Summary</h3>
                   <div className="space-y-5 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
@@ -478,19 +605,98 @@ Please let me know how to proceed with the payment. Thank you!`;
                     ))}
                   </div>
                 </div>
+
+                {/* COUPON SECTION */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2"><Tag size={16} /> Apply Discount Code</h3>
+                  
+                  {appliedCoupon ? (
+                    <div className="flex items-center justify-between bg-green-50 border border-green-200 p-3 rounded-lg">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-green-700 uppercase">{appliedCoupon.code} Applied!</span>
+                        <span className="text-xs text-green-600">- ₹{couponDiscountAmount.toLocaleString()}</span>
+                      </div>
+                      <button onClick={handleRemoveCoupon} className="text-gray-400 hover:text-red-500 transition-colors p-1 cursor-pointer">
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleApplyCoupon} className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Enter coupon code" 
+                        value={couponInput}
+                        onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                        className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm outline-none focus:border-rose-500 uppercase"
+                      />
+                      <button 
+                        type="submit" 
+                        disabled={isApplyingCoupon || !couponInput.trim()}
+                        className="bg-gray-900 text-white px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isApplyingCoupon ? '...' : 'Apply'}
+                      </button>
+                    </form>
+                  )}
+                  {couponError && <p className="text-xs text-red-500 mt-2 font-medium">{couponError}</p>}
+
+                  {/* DISPLAY AVAILABLE COUPONS */}
+                  {availableCoupons.length > 0 && !appliedCoupon && (
+                    <div className="mt-5 border-t border-gray-50 pt-4">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Available Offers</p>
+                      <div className="space-y-2">
+                        {availableCoupons.map(coupon => (
+                          <div 
+                            key={coupon.id} 
+                            className="flex items-center justify-between bg-rose-50/50 border border-rose-100 rounded-lg p-3 cursor-pointer hover:bg-rose-50 transition-colors" 
+                            onClick={() => setCouponInput(coupon.code)}
+                          >
+                             <div className="flex flex-col">
+                                <span className="text-sm font-bold text-rose-700">{coupon.code}</span>
+                                <span className="text-xs text-rose-600/80 mt-0.5">
+                                  Save {coupon.discount_type === 'percentage' ? `${coupon.discount_value}%` : `₹${coupon.discount_value}`} {coupon.min_order_value > 0 ? `on orders above ₹${coupon.min_order_value}` : ''}
+                                </span>
+                             </div>
+                             <span className="text-[10px] font-bold text-rose-600 uppercase tracking-widest bg-white px-2 py-1 rounded shadow-sm border border-rose-100">Tap to Use</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+
+                {/* PRICE DETAILS */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                     <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-5">Price Details</h3>
                     <div className="space-y-3.5 text-sm">
-                        <div className="flex justify-between text-gray-600"><span>Total MRP</span><span>₹{totalMRP.toLocaleString()}</span></div>
-                        {totalDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount on MRP</span><span>- ₹{totalDiscount.toLocaleString()}</span></div>}
-                        <div className="flex justify-between text-gray-600"><span>Shipping</span><span className="text-green-600 font-medium">{shipping === 0 ? "FREE" : `₹${shipping}`}</span></div>
+                        <div className="flex justify-between text-gray-600"><span>Subtotal</span><span>₹{subtotal.toLocaleString()}</span></div>
+                        
+                        {appliedCoupon && <div className="flex justify-between text-green-600 font-medium"><span>Coupon Discount ({appliedCoupon.code})</span><span>- ₹{couponDiscountAmount.toLocaleString()}</span></div>}
+
+                        <div className="flex justify-between text-gray-600">
+                          <span>Shipping</span>
+                          <span className={shipping === 0 ? "text-green-600 font-medium" : "text-gray-900"}>
+                            {shipping === 0 ? "FREE" : `₹${shipping}`}
+                          </span>
+                        </div>
+                        
+                        {/* FREE SHIPPING PROGRESS TEXT */}
+                        {shipping > 0 && (
+                          <div className="text-[11px] text-rose-600 text-right mt-1 font-medium">
+                            Add ₹{amountNeededForFreeShipping.toLocaleString()} more for FREE shipping
+                          </div>
+                        )}
+                        
                         <div className="h-px bg-dashed border-t border-dashed border-gray-200 my-4" />
+                        
                         <div className="flex justify-between items-center">
                             <div className="flex flex-col"><span className="font-bold text-gray-900 text-base">Total Amount</span><span className="text-[10px] text-gray-400 font-medium">Inclusive of VAT/GST</span></div>
                             <span className="font-bold text-gray-900 text-xl">₹{total.toLocaleString()}</span>
                         </div>
                     </div>
                 </div>
+
             </div>
           </div>
         </div>
@@ -514,13 +720,13 @@ Please let me know how to proceed with the payment. Thank you!`;
                   href={whatsappLink} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="w-full block py-3.5 bg-green-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-green-700 transition-colors"
+                  className="w-full block py-3.5 bg-green-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-green-700 transition-colors cursor-pointer text-center"
                 >
                   Open WhatsApp Manually
                 </a>
                 <button 
                   onClick={handleFinish} 
-                  className="w-full py-3.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-gray-200 transition-colors"
+                  className="w-full py-3.5 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-gray-200 transition-colors cursor-pointer text-center"
                 >
                   Go to My Orders
                 </button>

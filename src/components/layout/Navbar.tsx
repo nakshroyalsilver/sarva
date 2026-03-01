@@ -3,13 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { 
   Search, Heart, ShoppingBag, User, Menu, X, 
   ChevronRight, ChevronDown, MapPin, XCircle, 
-  TrendingUp, Sparkles, FolderSearch ,Package
+  TrendingUp, Sparkles, FolderSearch, Package
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "@/context/CartContext"; 
 import { supabase } from "../../../supabase"; 
 
-// Kept static parts outside to keep it clean
 const staticLeftCategories = [
   { name: "New Arrivals", path: "/category/new", highlight: true, featuredImg: "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=400&q=80" },
 ];
@@ -41,7 +40,6 @@ const Navbar = () => {
   const [pincode, setPincode] = useState(localStorage.getItem("user_pincode") || "Select Location");
   const [tempPincode, setTempPincode] = useState("");
 
-  // --- NEW: Dynamic State for Categories ---
   const [navCategories, setNavCategories] = useState<any[]>([...staticLeftCategories, ...staticRightCategories]);
   const [categoryLinks, setCategoryLinks] = useState<{name: string, path: string}[]>([]);
 
@@ -51,7 +49,35 @@ const Navbar = () => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // --- NEW: Fetch Categories from Supabase ---
+  // --- NEW: DYNAMIC ANNOUNCEMENT BAR LOGIC ---
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [announcementIndex, setAnnouncementIndex] = useState(0);
+
+  useEffect(() => {
+    async function fetchAnnouncements() {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true });
+
+      if (data && !error) {
+        setAnnouncements(data);
+      }
+    }
+    fetchAnnouncements();
+  }, []);
+
+  // Sliding Logic for Announcements
+  useEffect(() => {
+    if (announcements.length <= 1) return; // Don't slide if only 1
+    const interval = setInterval(() => {
+      setAnnouncementIndex((prev) => (prev + 1) % announcements.length);
+    }, 4000); // Changes every 4 seconds
+    return () => clearInterval(interval);
+  }, [announcements.length]);
+  // ------------------------------------------
+
   useEffect(() => {
     async function fetchCategories() {
       const { data, error } = await supabase
@@ -61,19 +87,15 @@ const Navbar = () => {
         .order('created_at', { ascending: true });
 
       if (data && !error) {
-        // Format DB categories to match the Navbar structure
         const dbCategories = data.map(cat => ({
           name: cat.name,
           path: `/category/${cat.slug}`,
-          featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80", // Fallback image for dropdown
-          subCats: null // Set to null since there are no subcategories in DB yet
+          featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80", 
+          subCats: null 
         }));
 
-        // Merge: Static Left + DB Categories + Static Right
         const combinedNav = [...staticLeftCategories, ...dbCategories, ...staticRightCategories];
         setNavCategories(combinedNav);
-        
-        // Update category links for the search functionality
         setCategoryLinks(combinedNav.map(c => ({ name: c.name, path: c.path })));
       }
     }
@@ -162,8 +184,27 @@ const Navbar = () => {
   return (
     <>
       <header className="sticky top-0 z-50 bg-white border-b border-gray-200 font-sans">
-        <div className="bg-gradient-to-r from-rose-50 via-[#FFF0F5] to-rose-50 text-rose-950 text-center text-[10px] py-1.5 tracking-wider font-medium border-b border-rose-100">
-          FLAT 10% OFF ON YOUR FIRST ORDER | USE CODE: <span className="font-bold">NEW10</span>
+        
+        {/* --- DYNAMIC ANNOUNCEMENT BAR --- */}
+        <div className="bg-gradient-to-r from-rose-50 via-[#FFF0F5] to-rose-50 text-rose-950 text-center text-[10px] tracking-wider font-medium border-b border-rose-100 overflow-hidden relative h-[28px] flex items-center justify-center">
+          <AnimatePresence mode="wait">
+            {announcements.length > 0 ? (
+              <motion.div
+                key={announcementIndex}
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: -20, opacity: 0 }}
+                transition={{ duration: 0.5, ease: "easeInOut" }}
+                className="absolute w-full"
+              >
+                {announcements[announcementIndex].message}
+              </motion.div>
+            ) : (
+              <motion.div className="absolute w-full">
+                WELCOME TO SARVAA FINE JEWELRY
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         <div className="container mx-auto px-6 relative z-30 bg-white">
