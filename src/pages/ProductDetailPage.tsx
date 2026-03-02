@@ -34,6 +34,9 @@ const ProductDetailPage = () => {
   
   const [showNotifyPopup, setShowNotifyPopup] = useState(false);
   const [stockAlertMessage, setStockAlertMessage] = useState<string | null>(null);
+  
+  // NEW: State to track if the item is already waitlisted
+  const [isNotified, setIsNotified] = useState(false);
 
   const [isZooming, setIsZooming] = useState(false);
   const [zoomStyle, setZoomStyle] = useState({});
@@ -111,6 +114,14 @@ const ProductDetailPage = () => {
     
   const isOutOfStock = currentStock <= 0;
 
+  // NEW: Check on load if this item was already waitlisted by the user
+  useEffect(() => {
+    if (product?.id) {
+      const waitlistedItems = JSON.parse(localStorage.getItem("waitlistedProducts") || "[]");
+      setIsNotified(waitlistedItems.includes(product.id));
+    }
+  }, [product?.id]);
+
   const existingCartQty = Array.isArray(cartItems) 
     ? cartItems.filter(item => item.id === product.id).reduce((sum, item) => sum + (item.qty || 1), 0)
     : 0;
@@ -166,9 +177,42 @@ const ProductDetailPage = () => {
     });
   };
 
-  const handleNotifyMe = () => {
-    setShowNotifyPopup(true);
-    setTimeout(() => setShowNotifyPopup(false), 3500); 
+  const handleNotifyMe = async () => {
+    if (isNotified) return;
+
+    const storedUser = localStorage.getItem("currentUser");
+    
+    if (!storedUser) {
+      triggerStockAlert("Please log in or register first to join the waitlist.");
+      setTimeout(() => navigate('/login'), 2000);
+      return;
+    }
+
+    const user = JSON.parse(storedUser);
+
+    // Push to Supabase Waitlist
+    const { error } = await supabase.from('waitlist').insert([{
+      product_id: product.id,
+      product_name: product.title || product.name,
+      customer_name: user.name,
+      customer_phone: user.phone || user.email || 'N/A'
+    }]);
+
+    if (!error) {
+      setIsNotified(true);
+
+      // Save to localStorage so it syncs with the grid cards
+      const waitlistedItems = JSON.parse(localStorage.getItem("waitlistedProducts") || "[]");
+      if (!waitlistedItems.includes(product.id)) {
+        waitlistedItems.push(product.id);
+        localStorage.setItem("waitlistedProducts", JSON.stringify(waitlistedItems));
+      }
+
+      setShowNotifyPopup(true);
+      setTimeout(() => setShowNotifyPopup(false), 3500); 
+    } else {
+      triggerStockAlert("Failed to join waitlist. Please try again.");
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -362,9 +406,14 @@ const ProductDetailPage = () => {
                  {isOutOfStock ? (
                    <button 
                      onClick={handleNotifyMe} 
-                     className="flex-1 bg-stone-900 text-white font-bold uppercase tracking-widest text-sm rounded-lg hover:bg-stone-800 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                     disabled={isNotified}
+                     className={`flex-1 text-white font-bold uppercase tracking-widest text-sm rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 ${
+                       isNotified 
+                         ? "bg-green-600 border-green-600 cursor-default" 
+                         : "bg-stone-900 hover:bg-stone-800 cursor-pointer"
+                     }`}
                    >
-                     <Bell size={18} /> Notify Me When Available
+                     {isNotified ? <>Waitlisted <Check size={18} /></> : <><Bell size={18} /> Notify Me When Available</>}
                    </button>
                  ) : (
                    <>
@@ -408,7 +457,6 @@ const ProductDetailPage = () => {
 
             <div className="border-t border-gray-100 pt-2">
                <AccordionItem title="Product Description">
-                 {/* FIXED: DANGEROUSLY SET INNER HTML WITH TAILWIND UTILITY CLASSES FOR QUILL SUPPORT */}
                  {product.detail_description ? (
                    <div 
                      className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap [&_strong]:font-bold [&_b]:font-bold [&_em]:italic [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5 [&_a]:text-rose-600 [&_a]:underline [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-bold [&_h3]:font-bold"
@@ -451,9 +499,14 @@ const ProductDetailPage = () => {
          {isOutOfStock ? (
            <button 
              onClick={handleNotifyMe} 
-             className="flex-1 bg-stone-900 text-white font-bold uppercase tracking-widest text-xs rounded-lg py-3.5 shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+             disabled={isNotified}
+             className={`flex-1 text-white font-bold uppercase tracking-widest text-xs rounded-lg py-3.5 shadow-lg flex items-center justify-center gap-2 ${
+               isNotified
+                 ? "bg-green-600 border-green-600 cursor-default"
+                 : "bg-stone-900 hover:bg-stone-800 cursor-pointer"
+             }`}
            >
-             <Bell size={16} /> Notify Me
+             {isNotified ? <>Waitlisted <Check size={16} /></> : <><Bell size={16} /> Notify Me</>}
            </button>
          ) : (
            <>
@@ -473,7 +526,6 @@ const ProductDetailPage = () => {
          )}
       </div>
 
-      {/* BEAUTIFUL NOTIFY ME POPUP */}
       <AnimatePresence>
         {showNotifyPopup && (
           <motion.div
@@ -486,12 +538,11 @@ const ProductDetailPage = () => {
             <div className="bg-rose-50 p-2 rounded-full border border-rose-100">
               <Check size={16} className="text-rose-600" strokeWidth={2.5} />
             </div>
-            <span className="text-sm font-bold tracking-wide">You'll be notified when this is back in stock!</span>
+            <span className="text-sm font-bold tracking-wide">You've been added to the waitlist!</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* BEAUTIFUL STOCK WARNING POPUP */}
       <AnimatePresence>
         {stockAlertMessage && (
           <motion.div

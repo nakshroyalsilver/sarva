@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { supabase } from "../../supabase"; // Make sure this path is correct for your setup!
 
 // Steps for the flow
 type LoginStep = 'PHONE' | 'OTP' | 'DETAILS';
@@ -50,6 +51,7 @@ const LoginPage = () => {
     setError("");
     setIsLoading(true);
     
+    // Simulate sending OTP
     setTimeout(() => {
       setIsLoading(false);
       setStep('OTP');
@@ -58,7 +60,7 @@ const LoginPage = () => {
     }, 1000);
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.join("").length !== 4) {
       setError("Please enter the complete 4-digit code.");
@@ -67,36 +69,64 @@ const LoginPage = () => {
     setIsLoading(true);
     setError("");
 
-    setTimeout(() => {
-      setIsLoading(false);
-      const existingUser = localStorage.getItem(`user_${phoneNumber}`);
+    try {
+      // 1. Check if this phone number exists in our Supabase 'customers' table
+      const { data: existingUser, error: fetchError } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('phone', phoneNumber)
+        .single();
+
       if (existingUser) {
+        // User exists! Log them in immediately.
         localStorage.setItem("isLoggedIn", "true");
-        localStorage.setItem("currentUser", existingUser);
+        localStorage.setItem("currentUser", JSON.stringify(existingUser));
         navigate("/");
       } else {
+        // User does not exist, move to details step to register them
         setStep('DETAILS');
       }
-    }, 1200);
+    } catch (err) {
+      console.error("Error verifying user:", err);
+      // Fallback: If network fails or user not found, send to details to be safe
+      setStep('DETAILS');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleSaveDetails = (e: React.FormEvent) => {
+  const handleSaveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError("");
     
     const userData = {
-      mobile: phoneNumber,
-      ...details,
-      createdAt: new Date().toISOString()
+      phone: phoneNumber, // FIXED: Using 'phone' to match DB
+      name: details.name,
+      email: details.email,
+      gender: details.gender
     };
 
-    setTimeout(() => {
-      localStorage.setItem(`user_${phoneNumber}`, JSON.stringify(userData));
-      localStorage.setItem("currentUser", JSON.stringify(userData));
+    try {
+      // 2. Insert new user into Supabase 'customers' table
+      const { data, error: insertError } = await supabase
+        .from('customers')
+        .insert([userData])
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // 3. Save to local storage so the session stays active
+      localStorage.setItem("currentUser", JSON.stringify(data || userData));
       localStorage.setItem("isLoggedIn", "true");
-      setIsLoading(false);
       navigate("/"); 
-    }, 1500);
+    } catch (err: any) {
+      console.error("Error saving details:", err);
+      setError(err.message || "Failed to create account. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleOtpChange = (index: number, value: string) => {
@@ -122,7 +152,7 @@ const LoginPage = () => {
             {step !== 'PHONE' && (
               <button 
                 onClick={() => setStep(step === 'DETAILS' ? 'OTP' : 'PHONE')}
-                className="absolute top-5 left-5 p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-all"
+                className="absolute top-5 left-5 p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-full transition-all cursor-pointer"
               >
                 <ArrowLeft size={18} />
               </button>
@@ -159,7 +189,7 @@ const LoginPage = () => {
                       />
                     </div>
                   </div>
-                  <button type="submit" disabled={isLoading || phoneNumber.length !== 10} className="w-full bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 disabled:bg-gray-100 flex items-center justify-center gap-2 transition-all">
+                  <button type="submit" disabled={isLoading || phoneNumber.length !== 10} className="w-full bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 disabled:bg-gray-100 flex items-center justify-center gap-2 transition-all cursor-pointer">
                     {isLoading ? <Loader2 size={16} className="animate-spin" /> : <>Get OTP <ArrowRight size={16} /></>}
                   </button>
                 </form>
@@ -180,11 +210,11 @@ const LoginPage = () => {
                     ))}
                   </div>
                   <div className="space-y-4 text-center">
-                    <button type="submit" disabled={isLoading || otp.join("").length !== 4} className="w-full bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 disabled:bg-gray-100 flex items-center justify-center gap-2 transition-all">
+                    <button type="submit" disabled={isLoading || otp.join("").length !== 4} className="w-full bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 disabled:bg-gray-100 flex items-center justify-center gap-2 transition-all cursor-pointer">
                       {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Verify & Continue"}
                     </button>
                     <p className="text-[11px] text-gray-400 font-medium">
-                      {timer > 0 ? `Resend in ${timer}s` : <button type="button" onClick={() => setTimer(30)} className="text-rose-600 font-bold hover:underline transition-all">Resend Code</button>}
+                      {timer > 0 ? `Resend in ${timer}s` : <button type="button" onClick={() => setTimer(30)} className="text-rose-600 font-bold hover:underline transition-all cursor-pointer">Resend Code</button>}
                     </p>
                   </div>
                 </form>
@@ -236,7 +266,7 @@ const LoginPage = () => {
                     </div>
                   </div>
 
-                  <button type="submit" disabled={isLoading} className="w-full mt-4 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all">
+                  <button type="submit" disabled={isLoading} className="w-full mt-4 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer">
                     {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Complete Profile"}
                   </button>
                 </form>

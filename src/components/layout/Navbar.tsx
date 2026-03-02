@@ -184,9 +184,9 @@ const Navbar = () => {
     <>
       <header className="sticky top-0 z-50 bg-white border-b border-gray-200 font-sans">
         
-        <div className="bg-gradient-to-r from-rose-50 via-[#FFF0F5] to-rose-50 text-rose-950 text-center text-xs sm:text-sm tracking-widest font-bold border-b border-rose-100 overflow-hidden relative h-10 flex items-center justify-center">
-          <AnimatePresence mode="wait">
-            {announcements.length > 0 ? (
+        {announcements.length > 0 && (
+          <div className="bg-gradient-to-r from-rose-50 via-[#FFF0F5] to-rose-50 text-rose-950 text-center text-xs sm:text-sm tracking-widest font-bold border-b border-rose-100 overflow-hidden relative h-10 flex items-center justify-center">
+            <AnimatePresence mode="wait">
               <motion.div
                 key={announcementIndex}
                 initial={{ x: -100, opacity: 0 }}
@@ -195,15 +195,11 @@ const Navbar = () => {
                 transition={{ duration: 0.9, ease: "easeInOut" }}
                 className="absolute w-full"
               >
-                {announcements[announcementIndex].message}
+                {announcements[announcementIndex]?.message}
               </motion.div>
-            ) : (
-              <motion.div className="absolute w-full">
-                WELCOME TO SARVAA FINE JEWELRY
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+            </AnimatePresence>
+          </div>
+        )}
 
         <div className="container mx-auto px-6 relative z-30 bg-white">
           <div className="flex lg:hidden items-center justify-between h-14">
