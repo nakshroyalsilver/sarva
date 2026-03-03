@@ -1,62 +1,56 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Search, TrendingUp, FolderSearch, Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Helmet } from "react-helmet-async";
-import { supabase } from "../../supabase"; // <-- ADDED SUPABASE IMPORT
+import { supabase } from "../../supabase"; 
+import { useQuery } from "@tanstack/react-query"; // <-- ADDED TANSTACK QUERY
 
 const SearchPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
 
-  // --- LIVE BACKEND STATES ---
-  const [popularSearches, setPopularSearches] = useState<string[]>([]);
-  const [categories, setCategories] = useState<{name: string, slug: string}[]>([]);
-  const [trendingProducts, setTrendingProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // --- TANSTACK QUERY: FETCH & CACHE SEARCH DATA ---
+  const { data, isLoading } = useQuery({
+    queryKey: ['searchPageData'],
+    queryFn: async () => {
+      // 1. Fetch Live Categories
+      const { data: catData } = await supabase.from('categories').select('name, slug').limit(8);
+      
+      // 2. Fetch Live Trending Products
+      const { data: prodData } = await supabase
+        .from('products')
+        .select('id, title, price, image_url, image_urls')
+        .order('created_at', { ascending: false })
+        .limit(10);
 
-  // --- FETCH DATA FROM SUPABASE ---
-  useEffect(() => {
-    async function fetchSearchData() {
-      setLoading(true);
-      try {
-        // 1. Fetch Live Categories
-        const { data: catData } = await supabase.from('categories').select('name, slug').limit(8);
-        if (catData) {
-          setCategories(catData);
-        }
+      let formattedProducts: any[] = [];
+      let searches: string[] = [];
 
-        // 2. Fetch Live Trending Products (Newest 10 to extract search names, displaying top 3)
-        const { data: prodData } = await supabase
-          .from('products')
-          .select('id, title, price, image_url, image_urls')
-          .order('created_at', { ascending: false })
-          .limit(10);
-
-        if (prodData) {
-          // Format top 3 for the product cards
-          const formattedProducts = prodData.slice(0, 3).map(p => ({
-            id: p.id,
-            name: p.title,
-            price: p.price || 0,
-            img: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
-          }));
-          setTrendingProducts(formattedProducts);
-
-          // Use the titles of the recent products as "Popular Searches"
-          const searches = prodData.map(p => p.title);
-          setPopularSearches(searches);
-        }
-      } catch (error) {
-        console.error("Error fetching search data:", error);
-      } finally {
-        setLoading(false);
+      if (prodData) {
+        formattedProducts = prodData.slice(0, 3).map(p => ({
+          id: p.id,
+          name: p.title,
+          price: p.price || 0,
+          img: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
+        }));
+        searches = prodData.map(p => p.title);
       }
-    }
-    fetchSearchData();
-  }, []);
+
+      return {
+        categories: catData || [],
+        trendingProducts: formattedProducts,
+        popularSearches: searches
+      };
+    },
+    staleTime: 1000 * 60 * 15, // Cache this initial discovery data for 15 minutes
+  });
+
+  const categories = data?.categories || [];
+  const trendingProducts = data?.trendingProducts || [];
+  const popularSearches = data?.popularSearches || [];
 
   // --- DYNAMIC FILTERING ---
   const filteredSearches = query 
@@ -66,8 +60,6 @@ const SearchPage = () => {
   const filteredCategories = query
     ? categories.filter(c => c.name.toLowerCase().includes(query.toLowerCase())).slice(0, 4)
     : categories.slice(0, 4);
-
-  const displayProducts = trendingProducts;
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans text-gray-900">
@@ -90,7 +82,7 @@ const SearchPage = () => {
           </h1>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
             <Loader2 size={32} className="animate-spin mb-4 text-rose-400" />
             <p className="text-sm">Curating suggestions...</p>
@@ -114,13 +106,11 @@ const SearchPage = () => {
                     {filteredSearches.map((suggestion, idx) => (
                       <li key={idx}>
                         <button 
-                          // Navigate to actual search results
                           onClick={() => navigate(`/search-results?q=${encodeURIComponent(suggestion)}`)}
                           className="w-full text-left px-4 py-3 rounded-xl hover:bg-rose-50 text-gray-700 hover:text-rose-600 font-medium transition-colors flex items-center justify-between group cursor-pointer"
                         >
                           <span className="flex items-center gap-3 truncate pr-4">
                             <Search size={14} className="text-gray-300 group-hover:text-rose-400 shrink-0" />
-                            {/* Highlight matching text */}
                             {query ? (
                               <span className="truncate">
                                 <span className="font-bold text-rose-600">
@@ -153,7 +143,6 @@ const SearchPage = () => {
                     {filteredCategories.map((cat, idx) => (
                       <button 
                         key={idx}
-                        // Navigate directly to the category page
                         onClick={() => navigate(`/category/${cat.slug}`)}
                         className="px-5 py-2.5 bg-gray-50 border border-gray-100 hover:border-rose-200 hover:bg-rose-50 text-sm font-semibold text-gray-700 hover:text-rose-600 rounded-xl transition-colors shadow-sm cursor-pointer"
                       >
@@ -175,10 +164,9 @@ const SearchPage = () => {
               </div>
               
               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                {displayProducts.map((product) => (
+                {trendingProducts.map((product) => (
                   <button 
                     key={product.id}
-                    // Navigate directly to the product detail page
                     onClick={() => navigate(`/product/${product.id}`)}
                     className="group flex flex-col text-left cursor-pointer"
                   >

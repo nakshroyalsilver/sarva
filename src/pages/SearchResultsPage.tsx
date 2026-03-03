@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Filter, X, SlidersHorizontal, ArrowUpDown, ChevronDown, Frown, Loader2 } from "lucide-react";
@@ -6,7 +6,8 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import ProductCard from "@/components/ProductCard"; 
 import { Helmet } from "react-helmet-async";
-import { supabase } from "../../supabase"; // <-- ADDED SUPABASE IMPORT
+import { supabase } from "../../supabase"; 
+import { useQuery } from "@tanstack/react-query"; // <-- ADDED TANSTACK QUERY
 
 const SearchResultsPage = () => {
   const [searchParams] = useSearchParams();
@@ -14,51 +15,40 @@ const SearchResultsPage = () => {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [sortOption, setSortOption] = useState("recommended");
   
-  // --- NEW: Live Supabase States ---
-  const [rawProducts, setRawProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  // --- TANSTACK QUERY: FETCH & CACHE SEARCH RESULTS ---
+  const { data: rawProducts = [], isLoading } = useQuery({
+    queryKey: ['search', query], // Caches uniquely based on the exact search term
+    queryFn: async () => {
+      if (!query) return [];
 
-  // --- NEW: Fetch Real Data from Supabase ---
+      const { data, error } = await supabase
+        .from('products')
+        .select('*, categories(name, slug)')
+        .ilike('title', `%${query}%`); 
+
+      if (error) throw error;
+
+      if (data) {
+        return data.map((p: any) => ({
+          ...p,
+          name: p.title,
+          image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
+          price: p.price || 0,
+          category: p.categories?.name || 'Uncategorized'
+        }));
+      }
+      return [];
+    },
+    enabled: !!query, // Only run the query if there is actually a search term
+    staleTime: 1000 * 60 * 5, // Cache these specific search results for 5 minutes
+  });
+
+  // Ensure window is at top when search changes
   useEffect(() => {
     window.scrollTo(0, 0);
-
-    const fetchSearchResults = async () => {
-      setLoading(true);
-      try {
-        // Search the title for the query
-        const { data, error } = await supabase
-          .from('products')
-          .select('*, categories(name, slug)')
-          .ilike('title', `%${query}%`); 
-
-        if (error) throw error;
-
-        if (data) {
-          const formattedProducts = data.map(p => ({
-            ...p,
-            name: p.title,
-            image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
-            price: p.price || 0,
-            category: p.categories?.name || 'Uncategorized'
-          }));
-          setRawProducts(formattedProducts);
-        }
-      } catch (error) {
-        console.error("Error fetching search results:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (query) {
-      fetchSearchResults();
-    } else {
-      setRawProducts([]);
-      setLoading(false);
-    }
   }, [query]);
 
-  // --- NEW: Live Sorting Logic ---
+  // --- Live Sorting Logic (Unchanged) ---
   const displayProducts = useMemo(() => {
     let result = [...rawProducts];
     if (sortOption === "price_low") {
@@ -97,7 +87,7 @@ const SearchResultsPage = () => {
               Results for "<span className="text-rose-600">{query}</span>"
             </h1>
             <p className="text-xs text-gray-500 mt-2">
-              {loading ? "Searching..." : `${displayProducts.length} items found`}
+              {isLoading ? "Searching..." : `${displayProducts.length} items found`}
             </p>
           </div>
         </div>
@@ -169,7 +159,7 @@ const SearchResultsPage = () => {
             </div>
 
             {/* Product Grid / Loading / Empty States */}
-            {loading ? (
+            {isLoading ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <Loader2 size={32} className="text-rose-400 animate-spin mb-4" />
                 <p className="text-sm text-gray-500">Searching catalog...</p>

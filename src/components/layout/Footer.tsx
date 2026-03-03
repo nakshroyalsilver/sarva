@@ -97,7 +97,7 @@ const Footer = () => {
               <Truck size={28} strokeWidth={1.5} className="opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
               <div>
                 <h4 className="font-bold text-xs uppercase tracking-widest mb-1">Free Shipping</h4>
-                <p className="text-[10px] opacity-60">On all orders above ₹999</p>
+                <p className="text-[10px] opacity-60">On all orders above ₹5000</p>
               </div>
             </div>
             <div className="flex flex-col items-center gap-3 group px-2">
@@ -111,7 +111,7 @@ const Footer = () => {
               <RefreshCcw size={28} strokeWidth={1.5} className="opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all" />
               <div>
                 <h4 className="font-bold text-xs uppercase tracking-widest mb-1">Easy Returns</h4>
-                <p className="text-[10px] opacity-60">30-day policy</p>
+                <p className="text-[10px] opacity-60">7-day policy</p>
               </div>
             </div>
             <div className="flex flex-col items-center gap-3 group px-2">

@@ -11,18 +11,15 @@ import Footer from "@/components/layout/Footer";
 import { supabase } from "../../supabase";
 import { useCart } from "@/context/CartContext";
 import { Helmet } from "react-helmet-async";
+import { useQuery, useQueryClient } from "@tanstack/react-query"; // <-- ADDED TANSTACK QUERY
 
 const MyOrders = () => {
   const navigate = useNavigate();
   const { addToCart } = useCart(); 
+  const queryClient = useQueryClient(); // <-- Used to instantly update UI after canceling/returning
 
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
-
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
-  const [orderItems, setOrderItems] = useState<any[]>([]);
-  const [loadingDetails, setLoadingDetails] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -43,22 +40,21 @@ const MyOrders = () => {
     return -1; // Fallback for Cancelled or Return Requested
   };
 
+  // Get user from local storage on mount
   useEffect(() => {
     const storedUser = localStorage.getItem("currentUser");
     if (!storedUser) {
       navigate("/login");
       return;
     }
-    const parsedUser = JSON.parse(storedUser);
-    setUser(parsedUser);
-    fetchMyOrders(parsedUser.email);
+    setUser(JSON.parse(storedUser));
   }, [navigate]);
 
-  const fetchMyOrders = async (userEmail: string) => {
-    try {
-      setLoading(true);
-      const cleanEmail = userEmail.trim();
-
+  // --- 1. TANSTACK QUERY: FETCH ALL ORDERS ---
+  const { data: orders = [], isLoading: loadingOrders } = useQuery({
+    queryKey: ['myOrders', user?.email], // Caches uniquely for this user
+    queryFn: async () => {
+      const cleanEmail = user?.email?.trim();
       const { data, error } = await supabase
         .from("orders")
         .select("*")
@@ -66,20 +62,16 @@ const MyOrders = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
-    } catch (error) {
-      console.error("Error fetching orders:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      return data || [];
+    },
+    enabled: !!user?.email, // Only run the query once we have the user's email
+    staleTime: 1000 * 60 * 5, // Keep fresh for 5 minutes
+  });
 
-  const handleViewDetails = async (order: any) => {
-    setSelectedOrder(order);
-    setLoadingDetails(true);
-    setOrderItems([]); 
-
-    try {
+  // --- 2. TANSTACK QUERY: FETCH ORDER DETAILS (ITEMS) ON DEMAND ---
+  const { data: orderItems = [], isFetching: loadingDetails } = useQuery({
+    queryKey: ['orderDetails', selectedOrder?.id], // Caches uniquely for this specific order
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("order_items")
         .select(`
@@ -89,15 +81,18 @@ const MyOrders = () => {
           size,
           products ( name, images, image )
         `)
-        .eq("order_id", order.id);
+        .eq("order_id", selectedOrder.id);
 
       if (error) throw error;
-      setOrderItems(data || []);
-    } catch (error) {
-      console.error("Error fetching order details:", error);
-    } finally {
-      setLoadingDetails(false);
-    }
+      return data || [];
+    },
+    enabled: !!selectedOrder?.id, // Only run when a user clicks "View Details"
+    staleTime: 1000 * 60 * 30, // Cache the items for 30 minutes since past order items don't change
+  });
+
+  const handleViewDetails = (order: any) => {
+    setSelectedOrder(order);
+    // Note: TanStack query automatically handles the fetching as soon as selectedOrder is set!
   };
 
   const closeModal = () => {
@@ -125,9 +120,12 @@ const MyOrders = () => {
     try {
       const { error } = await supabase.from('orders').update({ status: 'Cancelled' }).eq('id', selectedOrder.id);
       if (error) throw error;
-      const updatedOrder = { ...selectedOrder, status: 'Cancelled' };
-      setSelectedOrder(updatedOrder);
-      setOrders(orders.map(o => o.id === selectedOrder.id ? updatedOrder : o));
+      
+      // Update local modal view
+      setSelectedOrder({ ...selectedOrder, status: 'Cancelled' });
+      
+      // Tell TanStack Query to silently refresh the orders list in the background
+      await queryClient.invalidateQueries({ queryKey: ['myOrders', user?.email] });
     } catch (error) {
       console.error("Error cancelling order:", error);
       alert("Failed to cancel order.");
@@ -142,9 +140,12 @@ const MyOrders = () => {
     try {
       const { error } = await supabase.from('orders').update({ status: 'Return Requested' }).eq('id', selectedOrder.id);
       if (error) throw error;
-      const updatedOrder = { ...selectedOrder, status: 'Return Requested' };
-      setSelectedOrder(updatedOrder);
-      setOrders(orders.map(o => o.id === selectedOrder.id ? updatedOrder : o));
+      
+      // Update local modal view
+      setSelectedOrder({ ...selectedOrder, status: 'Return Requested' });
+      
+      // Tell TanStack Query to silently refresh the orders list
+      await queryClient.invalidateQueries({ queryKey: ['myOrders', user?.email] });
       alert("Return request submitted successfully. Our team will contact you shortly.");
     } catch (error) {
       console.error("Error requesting return:", error);
@@ -189,9 +190,9 @@ const MyOrders = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#FCFCFC] font-sans print:bg-white">
       <Helmet>
-              <title> My Orders | Sarvaa Fine Jewelry</title>
-              <meta name="robots" content="noindex, nofollow" />
-            </Helmet>
+        <title> My Orders | Sarvaa Fine Jewelry</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
 
       <div className="print:hidden"><Navbar /></div>
 
@@ -206,7 +207,7 @@ const MyOrders = () => {
           </div>
         </div>
 
-        {loading ? (
+        {loadingOrders ? (
           <div className="space-y-6">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-32 bg-white rounded-2xl border border-gray-100 shadow-sm animate-pulse" />
@@ -221,7 +222,7 @@ const MyOrders = () => {
           </motion.div>
         ) : (
           <div className="space-y-6">
-            {orders.map((order, index) => (
+            {orders.map((order: any, index: number) => (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} key={order.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                 <div className="bg-gray-50/50 px-6 py-4 border-b border-gray-100 flex flex-wrap gap-4 items-center justify-between">
                   <div className="flex items-center gap-6">
@@ -345,7 +346,7 @@ const MyOrders = () => {
                       <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" /></div>
                     ) : (
                       <div className="space-y-4">
-                        {orderItems.map((item, idx) => {
+                        {orderItems.map((item: any, idx: number) => {
                           const productImg = item.products?.images?.[0] || item.products?.image || "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=200&q=80";
                           return (
                             <div key={idx} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
@@ -456,7 +457,7 @@ const MyOrders = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {orderItems.map((item, idx) => (
+                    {orderItems.map((item: any, idx: number) => (
                       <tr key={idx} className="border-b border-gray-200">
                         <td className="py-4 pr-4">
                           <p className="font-bold text-gray-900">{item.products?.name || "Premium Jewelry Item"}</p>

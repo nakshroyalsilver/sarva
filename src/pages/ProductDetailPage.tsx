@@ -8,6 +8,7 @@ import { useCart } from "@/context/CartContext";
 import { supabase } from "../../supabase"; 
 import ProductReviews from "@/components/home/ProductReviews";
 import { Helmet } from "react-helmet-async";
+import { useQuery } from "@tanstack/react-query"; // <-- ADDED IMPORT
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -15,12 +16,6 @@ const ProductDetailPage = () => {
   const { addToCart, toggleWishlist, wishlistItems, cartItems } = useCart();
   
   const topRef = useRef<HTMLDivElement>(null);
-
-  const [dbProduct, setDbProduct] = useState<any>(null);
-  const [dbSimilar, setDbSimilar] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const [availableOffers, setAvailableOffers] = useState<any[]>([]);
 
   const [activeImage, setActiveImage] = useState(0); 
   const [quantity, setQuantity] = useState(1);
@@ -34,73 +29,92 @@ const ProductDetailPage = () => {
   
   const [showNotifyPopup, setShowNotifyPopup] = useState(false);
   const [stockAlertMessage, setStockAlertMessage] = useState<string | null>(null);
-  
   const [isNotified, setIsNotified] = useState(false);
 
   const [isZooming, setIsZooming] = useState(false);
   const [zoomStyle, setZoomStyle] = useState({});
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    async function fetchProductDetails() {
-      setLoading(true);
-      try {
-        const { data: prodData } = await supabase.from('products').select('*, categories(name, slug)').eq('id', id).single();
+  // --- 1. TANSTACK QUERY: FETCH PRODUCT & SIMILAR ITEMS ---
+  const { data: pageData, isLoading } = useQuery({
+    queryKey: ['product', id], // Caches based on the exact product ID
+    queryFn: async () => {
+      if (!id) throw new Error("Product ID is missing");
+      
+      // Fetch Product
+      const { data: prodData, error: prodError } = await supabase
+        .from('products')
+        .select('*, categories(name, slug)')
+        .eq('id', id)
+        .single();
         
-        if (prodData) {
-          const formattedProduct = {
-            ...prodData,
-            name: prodData.title,
-            image: (prodData.image_urls && prodData.image_urls.length > 0) ? prodData.image_urls[0] : prodData.image_url,
-            price: prodData.price || 0,
-            category: prodData.categories?.slug || 'uncategorized',
-            stock_quantity: (prodData.stock_quantity !== undefined && prodData.stock_quantity !== null) ? Number(prodData.stock_quantity) : 0, 
-            rating: 4.8, 
-            reviews: 124 
-          };
-          setDbProduct(formattedProduct);
+      if (prodError || !prodData) throw new Error("Product not found");
 
-          const { data: simData } = await supabase.from('products').select('*, categories(name, slug)').eq('category_id', prodData.category_id).neq('id', id).limit(8);
-          if (simData) {
-            setDbSimilar(simData.map(p => ({
-              ...p,
-              name: p.title,
-              image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
-              price: p.price || 0,
-              category: p.categories?.slug || 'uncategorized'
-            })));
-          }
+      const formattedProduct = {
+        ...prodData,
+        name: prodData.title,
+        image: (prodData.image_urls && prodData.image_urls.length > 0) ? prodData.image_urls[0] : prodData.image_url,
+        price: prodData.price || 0,
+        category: prodData.categories?.slug || 'uncategorized',
+        stock_quantity: (prodData.stock_quantity !== undefined && prodData.stock_quantity !== null) ? Number(prodData.stock_quantity) : 0, 
+        rating: 4.8, 
+        reviews: 124 
+      };
+
+      // Fetch Similar
+      let formattedSimilar: any[] = [];
+      if (prodData.category_id) {
+        const { data: simData } = await supabase
+          .from('products')
+          .select('*, categories(name, slug)')
+          .eq('category_id', prodData.category_id)
+          .neq('id', id)
+          .limit(8);
+          
+        if (simData) {
+          formattedSimilar = simData.map((p: any) => ({
+            ...p,
+            name: p.title,
+            image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
+            price: p.price || 0,
+            category: p.categories?.slug || 'uncategorized'
+          }));
         }
-      } catch (error) {
-        console.error("Fetch error:", error);
-      } finally {
-        setLoading(false);
       }
-    }
 
-    if (id) fetchProductDetails();
-    window.scrollTo(0, 0);
-    setActiveImage(0);
-    setQuantity(1);
-  }, [id]);
+      return { product: formattedProduct, similarProducts: formattedSimilar };
+    },
+    enabled: !!id,
+    staleTime: 1000 * 60 * 5, // Keep fresh for 5 minutes
+  });
 
-  useEffect(() => {
-    async function fetchOffers() {
+  // --- 2. TANSTACK QUERY: FETCH OFFERS ---
+  const { data: availableOffers = [] } = useQuery({
+    queryKey: ['activeOffers'],
+    queryFn: async () => {
       const { data } = await supabase
         .from('coupons')
         .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
-        .limit(3); 
-        
-      if (data) setAvailableOffers(data);
-    }
-    fetchOffers();
-  }, []);
+        .limit(3);
+      return data || [];
+    },
+    staleTime: 1000 * 60 * 30, // Keep fresh for 30 minutes
+  });
 
-  // --- STRICTLY SUPABASE DATA NOW ---
-  const product = dbProduct;
-  const similarProducts = dbSimilar;
+  // Extract the data from TanStack Query
+  const product = pageData?.product;
+  const similarProducts = pageData?.similarProducts || [];
+
+  // Reset visual states when the ID changes (user clicked a similar product)
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    setActiveImage(0);
+    setQuantity(1);
+    setSelectedSize(null);
+    setSizeError(false);
+  }, [id]);
 
   const isWishlisted = product ? wishlistItems.some((item) => item.id === product.id) : false;
 
@@ -220,7 +234,7 @@ const ProductDetailPage = () => {
     });
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="bg-white min-h-screen flex flex-col font-sans">
         <Navbar />
@@ -409,7 +423,7 @@ const ProductDetailPage = () => {
                   <span className="text-sm font-bold text-gray-900">Available Offers</span>
                 </div>
                 <ul className="text-xs text-gray-600 space-y-1.5 ml-6 list-disc marker:text-rose-400">
-                  {availableOffers.map((offer) => (
+                  {availableOffers.map((offer: any) => (
                     <li key={offer.id}>
                       {offer.discount_type === 'percentage' 
                         ? `Flat ${offer.discount_value}% off` 
@@ -526,7 +540,7 @@ const ProductDetailPage = () => {
             <div className="border-t border-gray-100 pt-6">
               <h3 className="font-serif text-lg text-gray-900 mb-4">You May Also Like</h3>
               <div className="flex gap-4 overflow-x-auto pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-                {similarProducts.map((p, idx) => (
+                {similarProducts.map((p: any, idx: number) => (
                   <Link key={idx} to={`/product/${p.id}`} className="min-w-[160px] max-w-[160px] group block border border-gray-100 rounded-lg p-2 hover:shadow-md transition-shadow">
                     <div className="relative aspect-square bg-gray-50 rounded mb-2 overflow-hidden"><img src={p.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform" /></div>
                     <h4 className="text-xs font-medium text-gray-900 truncate">{p.name}</h4><p className="text-xs font-bold text-gray-900">₹{p.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
