@@ -6,7 +6,8 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { supabase } from "../../supabase"; // Make sure this path is correct for your setup!
+import { supabase } from "../../supabase"; 
+import { Helmet } from "react-helmet-async";
 
 // Steps for the flow
 type LoginStep = 'PHONE' | 'OTP' | 'DETAILS';
@@ -143,6 +144,12 @@ const LoginPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans text-gray-900">
+       
+       <Helmet>
+               <title>Login  | Sarvaa Fine Jewelry</title>
+               <meta name="robots" content="noindex, nofollow" />
+             </Helmet>
+
       <Navbar />
 
       <main className="flex-grow flex items-center justify-center py-12 px-4 bg-[#FCFCFC]">

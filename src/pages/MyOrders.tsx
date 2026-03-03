@@ -10,6 +10,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { supabase } from "../../supabase";
 import { useCart } from "@/context/CartContext";
+import { Helmet } from "react-helmet-async";
 
 const MyOrders = () => {
   const navigate = useNavigate();
@@ -187,6 +188,11 @@ const MyOrders = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FCFCFC] font-sans print:bg-white">
+      <Helmet>
+              <title> My Orders | Sarvaa Fine Jewelry</title>
+              <meta name="robots" content="noindex, nofollow" />
+            </Helmet>
+
       <div className="print:hidden"><Navbar /></div>
 
       <main className="flex-grow container mx-auto px-6 py-12 max-w-4xl print:hidden">

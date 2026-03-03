@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Briefcase, ArrowRight, CheckCircle2, Mail } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { Helmet } from "react-helmet-async"; // <-- ADDED SEO IMPORT
 
 const CorporatePage: React.FC = () => {
   const topRef = useRef<HTMLDivElement>(null);
@@ -31,6 +32,20 @@ const CorporatePage: React.FC = () => {
 
   return (
     <>
+      {/* --- ADDED SEO HELMET LOGIC --- */}
+      <Helmet>
+        <title>Corporate Gifting & B2B | Sarvaa Fine Jewelry</title>
+        <meta name="description" content="Elevate your corporate gifting with Sarvaa Fine Jewelry. Discover our exclusive corporate portal for bulk ordering, bespoke customization, and dedicated account management." />
+        <link rel="canonical" href="https://sarvaajewelry.com/corporate" />
+        
+        {/* Open Graph Tags for Social Sharing */}
+        <meta property="og:title" content="Corporate Gifting & B2B | Sarvaa Fine Jewelry" />
+        <meta property="og:description" content="Elevate your corporate gifting with Sarvaa Fine Jewelry. Discover our exclusive corporate portal for bulk ordering and bespoke customization." />
+        <meta property="og:url" content="https://sarvaajewelry.com/corporate" />
+        <meta property="og:type" content="website" />
+      </Helmet>
+      {/* --- END SEO HELMET LOGIC --- */}
+
       <div ref={topRef} className="absolute top-0 left-0 w-full h-0 pointer-events-none" aria-hidden="true" />
       
       <div className="min-h-screen flex flex-col bg-[#FCFCFC] font-sans text-gray-900">

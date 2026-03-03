@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/context/CartContext"; 
 import { supabase } from "../../supabase"; 
+import { Helmet } from "react-helmet-async";
 
 const CartPage = () => {
   const navigate = useNavigate(); 
@@ -26,16 +27,16 @@ const CartPage = () => {
         .limit(8); 
         
       if (!error && data) {
-        // Filter out items already in the cart and take the first 4
-        const filtered = data.filter((p: any) => !cartItems.find((c) => c.id === p.id)).slice(0, 4);
+        // ADDED TYPES HERE: (p: any) and (c: any)
+        const filtered = data.filter((p: any) => !cartItems.find((c: any) => c.id === p.id)).slice(0, 4);
         setSuggestedProducts(filtered);
       }
     };
     fetchSuggestions();
   }, [cartItems]);
 
-  // --- STRICT CART MATH LOGIC ---
-  const subtotal = cartItems.reduce((acc, item) => acc + (Number(item.price) * Number(item.qty)), 0);
+  // --- STRICT CART MATH LOGIC (ADDED TYPES) ---
+  const subtotal = cartItems.reduce((acc: number, item: any) => acc + (Number(item.price) * Number(item.qty)), 0);
   
   // Shipping: Free above ₹5000
   const shipping = subtotal >= 5000 ? 0 : 99;
@@ -45,8 +46,14 @@ const CartPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F9F9F9] font-sans">
-      <Navbar />
 
+     <Helmet>
+        <title>Shopping Cart | Sarvaa Fine Jewelry</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
+
+      <Navbar />
+       
       <main className="flex-grow container mx-auto px-4 py-8 lg:py-12">
         <h1 className="font-serif text-2xl md:text-3xl text-gray-900 mb-8">Shopping Cart ({cartItems.length})</h1>
 
@@ -56,7 +63,8 @@ const CartPage = () => {
             {/* LEFT COLUMN: ITEMS */}
             <div className="lg:w-2/3 space-y-8">
               <div className="space-y-4">
-                {cartItems.map((item) => (
+                {/* ADDED TYPE HERE: (item: any) */}
+                {cartItems.map((item: any) => (
                   <div key={`${item.id}-${item.size}`} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 md:gap-6 transition-shadow hover:shadow-md">
                     <Link to={`/product/${item.id}`} className="w-24 h-24 md:w-32 md:h-32 bg-gray-50 rounded-lg overflow-hidden flex-shrink-0 relative group">
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -94,7 +102,8 @@ const CartPage = () => {
               <div className="pt-8 border-t border-gray-200">
                 <h2 className="font-serif text-xl text-gray-900 mb-6">More to Love</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {suggestedProducts.map((p) => (
+                  {/* ADDED TYPE HERE: (p: any) */}
+                  {suggestedProducts.map((p: any) => (
                     <div key={p.id} className="bg-white rounded-lg border border-gray-100 overflow-hidden group hover:shadow-lg transition-all duration-300 flex flex-col h-full">
                       <Link to={`/product/${p.id}`} className="relative aspect-square bg-gray-50 overflow-hidden block">
                         <img src={p.image || p.image_url} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />

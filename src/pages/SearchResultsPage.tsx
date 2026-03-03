@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Filter, X, SlidersHorizontal, ArrowUpDown, ChevronDown, Frown } from "lucide-react";
+import { Filter, X, SlidersHorizontal, ArrowUpDown, ChevronDown, Frown, Loader2 } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import ProductCard from "@/components/ProductCard"; 
-import { products } from "@/data/products"; 
+import { Helmet } from "react-helmet-async";
+import { supabase } from "../../supabase"; // <-- ADDED SUPABASE IMPORT
 
 const SearchResultsPage = () => {
   const [searchParams] = useSearchParams();
@@ -13,21 +14,71 @@ const SearchResultsPage = () => {
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [sortOption, setSortOption] = useState("recommended");
   
-  // Basic Search Logic
-  const allResults = products.filter((p) => 
-    p.name.toLowerCase().includes(query.toLowerCase()) || 
-    p.category.toLowerCase().includes(query.toLowerCase())
-  );
+  // --- NEW: Live Supabase States ---
+  const [rawProducts, setRawProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Mock Filter Logic (Visual Only for UI)
-  const displayProducts = allResults; 
-
+  // --- NEW: Fetch Real Data from Supabase ---
   useEffect(() => {
     window.scrollTo(0, 0);
+
+    const fetchSearchResults = async () => {
+      setLoading(true);
+      try {
+        // Search the title for the query
+        const { data, error } = await supabase
+          .from('products')
+          .select('*, categories(name, slug)')
+          .ilike('title', `%${query}%`); 
+
+        if (error) throw error;
+
+        if (data) {
+          const formattedProducts = data.map(p => ({
+            ...p,
+            name: p.title,
+            image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
+            price: p.price || 0,
+            category: p.categories?.name || 'Uncategorized'
+          }));
+          setRawProducts(formattedProducts);
+        }
+      } catch (error) {
+        console.error("Error fetching search results:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (query) {
+      fetchSearchResults();
+    } else {
+      setRawProducts([]);
+      setLoading(false);
+    }
   }, [query]);
+
+  // --- NEW: Live Sorting Logic ---
+  const displayProducts = useMemo(() => {
+    let result = [...rawProducts];
+    if (sortOption === "price_low") {
+      result.sort((a, b) => a.price - b.price);
+    } else if (sortOption === "price_high") {
+      result.sort((a, b) => b.price - a.price);
+    } else if (sortOption === "newest") {
+      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }
+    return result;
+  }, [rawProducts, sortOption]);
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
+
+      <Helmet>
+        <title>Search Page | Sarvaa Fine Jewelry</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
+      
       <Navbar />
 
       <main className="flex-grow pt-4 pb-20">
@@ -45,7 +96,9 @@ const SearchResultsPage = () => {
             <h1 className="font-serif text-2xl md:text-3xl text-gray-900">
               Results for "<span className="text-rose-600">{query}</span>"
             </h1>
-            <p className="text-xs text-gray-500 mt-2">{displayProducts.length} items found</p>
+            <p className="text-xs text-gray-500 mt-2">
+              {loading ? "Searching..." : `${displayProducts.length} items found`}
+            </p>
           </div>
         </div>
 
@@ -115,8 +168,13 @@ const SearchResultsPage = () => {
                </div>
             </div>
 
-            {/* Product Grid */}
-            {displayProducts.length > 0 ? (
+            {/* Product Grid / Loading / Empty States */}
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 text-center">
+                <Loader2 size={32} className="text-rose-400 animate-spin mb-4" />
+                <p className="text-sm text-gray-500">Searching catalog...</p>
+              </div>
+            ) : displayProducts.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-4 gap-y-8 lg:gap-x-6 lg:gap-y-10">
                 {displayProducts.map((product) => (
                   <ProductCard key={product.id} product={product} />
@@ -155,11 +213,21 @@ const SearchResultsPage = () => {
         >
           <SlidersHorizontal size={16} /> Filters
         </button>
-        <button 
-          className="flex-1 flex items-center justify-center gap-2 py-4 text-xs font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50"
-        >
-          <ArrowUpDown size={16} /> Sort
-        </button>
+        <div className="flex-1 relative flex flex-col items-center justify-center">
+           <select 
+             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
+             value={sortOption}
+             onChange={(e) => setSortOption(e.target.value)}
+           >
+             <option value="recommended">Recommended</option>
+             <option value="newest">Newest First</option>
+             <option value="price_low">Price: Low to High</option>
+             <option value="price_high">Price: High to Low</option>
+           </select>
+           <div className="flex flex-col items-center justify-center gap-1 py-4 text-[10px] font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50 pointer-events-none">
+             <div className="flex items-center gap-2"><ArrowUpDown size={16} /> Sort</div>
+           </div>
+        </div>
       </div>
 
       {/* --- MOBILE FILTER DRAWER --- */}

@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer"; 
 import ProductCard from "@/components/ProductCard";
 import { supabase } from "../../supabase";
+import { Helmet } from "react-helmet-async"; // <-- ADDED SEO IMPORT
 
 const PRICE_RANGES = ["Under ₹1000", "₹1000 - ₹2500", "₹2500 - ₹5000", "Above ₹5000"];
 const MATERIAL_OPTIONS = ["925 Sterling Silver", "Rose Gold Plated", "Oxidized Silver", "Gold Plated"];
@@ -115,6 +116,43 @@ const CategoryPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
+      
+      {/* --- ADDED SEO HELMET LOGIC --- */}
+      <Helmet>
+        <title>{categoryName ? `${categoryName} | Sarvaa Fine Jewelry` : "Collection | Sarvaa Fine Jewelry"}</title>
+        <meta name="description" content={`Explore our exclusive collection of ${categoryName ? categoryName.toLowerCase() : 'fine jewelry'}, crafted with precision and timeless elegance.`} />
+        <link rel="canonical" href={`https://sarvaajewelry.com/category/${slug || 'all'}`} />
+        
+        {/* Open Graph Tags */}
+        <meta property="og:title" content={categoryName ? `${categoryName} | Sarvaa Fine Jewelry` : "Collection | Sarvaa Fine Jewelry"} />
+        <meta property="og:description" content={`Explore our exclusive collection of ${categoryName ? categoryName.toLowerCase() : 'fine jewelry'}.`} />
+        <meta property="og:url" content={`https://sarvaajewelry.com/category/${slug || 'all'}`} />
+        <meta property="og:type" content="website" />
+
+        {/* JSON-LD Breadcrumb Schema for Google */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": "https://sarvaajewelry.com"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": categoryName || "Collection",
+                "item": `https://sarvaajewelry.com/category/${slug || 'all'}`
+              }
+            ]
+          })}
+        </script>
+      </Helmet>
+      {/* --- END SEO HELMET LOGIC --- */}
+
       <Navbar />
 
       <main className="flex-grow pt-4 pb-20">

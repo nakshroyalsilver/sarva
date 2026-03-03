@@ -1,5 +1,18 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { Product } from "@/data/products";
+
+// --- NEW: Define the Product type here instead of importing from fake data ---
+export interface Product {
+  id: string;
+  name: string;
+  price: number;
+  originalPrice?: number;
+  image: string;
+  category?: string;
+  badge?: string;
+  rating?: number;
+  reviews?: number;
+  [key: string]: any; // Allows for any extra fields coming from Supabase
+}
 
 export interface CartItem extends Product {
   qty: number;
@@ -24,20 +37,20 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   // --- CART STATE ---
-  // CHANGED: Initialize from localStorage
+  // Initialize from localStorage
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
     const savedCart = localStorage.getItem("sarvaa_cart");
     return savedCart ? JSON.parse(savedCart) : [];
   });
 
-  // CHANGED: Save to localStorage on change
+  // Save to localStorage on change
   useEffect(() => {
     localStorage.setItem("sarvaa_cart", JSON.stringify(cartItems));
   }, [cartItems]);
 
   const addToCart = (product: Product, size: string = "Standard") => {
     setCartItems((prev) => {
-      // CHANGED: Check for BOTH product.id and size
+      // Check for BOTH product.id and size
       const existing = prev.find((item) => item.id === product.id && item.size === size);
       
       if (existing) {
@@ -66,14 +79,14 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
 
   const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0);
 
-  // --- WISHLIST STATE (NEW) ---
-  // CHANGED: Initialize from localStorage
+  // --- WISHLIST STATE ---
+  // Initialize from localStorage
   const [wishlistItems, setWishlistItems] = useState<Product[]>(() => {
     const savedWishlist = localStorage.getItem("sarvaa_wishlist");
     return savedWishlist ? JSON.parse(savedWishlist) : [];
   });
 
-  // CHANGED: Save to localStorage on change
+  // Save to localStorage on change
   useEffect(() => {
     localStorage.setItem("sarvaa_wishlist", JSON.stringify(wishlistItems));
   }, [wishlistItems]);

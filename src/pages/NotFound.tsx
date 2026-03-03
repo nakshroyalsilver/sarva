@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ShoppingBag } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { Helmet } from "react-helmet-async"; // <-- ADDED SEO IMPORT
 
 // Mock Trending Products Data
 const trendingProducts = [
@@ -36,6 +37,13 @@ const NotFound: React.FC = () => {
 
   return (
     <>
+      {/* --- ADDED SEO HIDE LOGIC --- */}
+      <Helmet>
+        <title>Page Not Found | Sarvaa Fine Jewelry</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
+      {/* --- END SEO HIDE LOGIC --- */}
+
       {/* 3. Place the invisible anchor at the absolute top */}
       <div ref={topRef} className="absolute top-0 left-0 w-full h-0 pointer-events-none" aria-hidden="true" />
       

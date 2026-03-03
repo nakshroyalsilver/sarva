@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import { supabase } from "../../../supabase"; 
-import { categories as staticCategories } from "@/data/products";
 
 interface LiveCategory {
   id: string;
@@ -35,10 +34,13 @@ const CategoryShowcase = () => {
           });
           setCategories(formattedCategories);
         } else {
-          setCategories(staticCategories as unknown as LiveCategory[]);
+          // Fallback to empty array instead of deleted static data
+          setCategories([]);
         }
       } catch (error) {
-        setCategories(staticCategories as unknown as LiveCategory[]);
+        console.error("Error fetching categories:", error);
+        // Fallback to empty array instead of deleted static data
+        setCategories([]);
       } finally {
         setLoading(false);
       }
@@ -104,7 +106,7 @@ const CategoryShowcase = () => {
                   <div key={i} className="min-w-[220px] md:min-w-[260px] aspect-[3/4] bg-gray-50 animate-pulse rounded-sm"></div>
                 ))}
             </div>
-          ) : (
+          ) : categories.length > 0 ? (
             <div 
               ref={scrollRef}
               className="flex gap-5 md:gap-7 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-6"
@@ -148,6 +150,10 @@ const CategoryShowcase = () => {
                   </Link>
                 </motion.div>
               ))}
+            </div>
+          ) : (
+            <div className="text-center py-10 text-gray-500">
+              No categories found.
             </div>
           )}
         </div>

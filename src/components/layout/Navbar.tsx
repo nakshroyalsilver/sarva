@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { 
   Search, Heart, ShoppingBag, User, Menu, X, 
-  ChevronRight, ChevronDown, MapPin, XCircle, 
+  ChevronRight, ChevronDown, MapPin, 
   TrendingUp, Sparkles, FolderSearch, Package
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,21 +18,14 @@ const staticRightCategories = [
   { name: "Corporate", path: "/corporate", featuredImg: "https://images.unsplash.com/photo-1556761175-5973dc0f32b7?w=400&q=80" },
 ];
 
-const searchPlaceholders = ["Search for Rings", "Search for Diamonds", "Search for Necklaces", "Search for 925 Silver"];
-const popularSearches = ["Diamond Rings", "Gold Chains", "Bridal Sets", "Platinum Bands", "Mangalsutra", "Stud Earrings", "Chokers", "Couple Rings"];
-
-const mockProducts = [
-  { id: 1, name: "Rose Gold Solitaire Ring", price: "₹25,999", category: "rings", img: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=200&q=80" },
-  { id: 2, name: "Kundan Bridal Choker", price: "₹12,999", category: "necklaces", img: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?w=200&q=80" },
-  { id: 3, name: "Gold Jhumkas", price: "₹8,499", category: "earrings", img: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=200&q=80" },
-  { id: 4, name: "Diamond Couple Bands", price: "₹35,000", category: "rings", img: "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=200&q=80" },
-];
+const searchPlaceholders = ["Search for Rings...", "Search for Diamonds...", "Search for Necklaces...", "Search for 925 Silver..."];
 
 const Navbar = () => {
   const { cartCount, wishlistCount } = useCart();
   const navigate = useNavigate();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
 
@@ -49,21 +42,19 @@ const Navbar = () => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
+  // --- DYNAMIC SEARCH STATES ---
+  const [popularSearches, setPopularSearches] = useState<string[]>([]);
+  const [trendingProducts, setTrendingProducts] = useState<any[]>([]);
+  const [allAvailableSuggestions, setAllAvailableSuggestions] = useState<string[]>([]); 
+
   // --- DYNAMIC ANNOUNCEMENT BAR LOGIC ---
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [announcementIndex, setAnnouncementIndex] = useState(0);
 
   useEffect(() => {
     async function fetchAnnouncements() {
-      const { data, error } = await supabase
-        .from('announcements')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: true });
-
-      if (data && !error) {
-        setAnnouncements(data);
-      }
+      const { data } = await supabase.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: true });
+      if (data) setAnnouncements(data);
     }
     fetchAnnouncements();
   }, []);
@@ -75,18 +66,15 @@ const Navbar = () => {
     }, 5000); 
     return () => clearInterval(interval);
   }, [announcements.length]);
-  // ------------------------------------------
 
+  // --- FETCH MASTER DATA FOR SEARCH ---
   useEffect(() => {
-    async function fetchCategories() {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('is_visible', true) 
-        .order('created_at', { ascending: true });
+    async function fetchNavData() {
+      const { data: catData } = await supabase.from('categories').select('*').eq('is_visible', true).order('created_at', { ascending: true });
 
-      if (data && !error) {
-        const dbCategories = data.map(cat => ({
+      let catNames: string[] = [];
+      if (catData) {
+        const dbCategories = catData.map(cat => ({
           name: cat.name,
           path: `/category/${cat.slug}`,
           featuredImg: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80", 
@@ -96,9 +84,45 @@ const Navbar = () => {
         const combinedNav = [...staticLeftCategories, ...dbCategories, ...staticRightCategories];
         setNavCategories(combinedNav);
         setCategoryLinks(combinedNav.map(c => ({ name: c.name, path: c.path })));
+        catNames = catData.map(c => c.name);
+      }
+
+      const { data: allProds } = await supabase.from('products').select('title');
+      if (allProds) {
+        const productNames = allProds.map(p => p.title);
+        setAllAvailableSuggestions([...new Set([...catNames, ...productNames])]);
+      }
+
+      const { data: prodData } = await supabase
+        .from('products')
+        .select('id, title, price, image_url, image_urls, categories(name)')
+        .order('created_at', { ascending: false }) 
+        .limit(10);
+
+      if (prodData) {
+        const formattedProducts = prodData.slice(0, 4).map((p: any) => ({
+          id: p.id,
+          name: p.title,
+          price: `₹${p.price?.toLocaleString() || 0}`,
+          category: Array.isArray(p.categories) ? p.categories[0]?.name : p.categories?.name || "",
+          img: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
+        }));
+        setTrendingProducts(formattedProducts);
+      }
+
+      const { data: trendingSearches } = await supabase
+        .from('search_analytics')
+        .select('search_term')
+        .order('search_count', { ascending: false })
+        .limit(5);
+
+      if (trendingSearches && trendingSearches.length > 0) {
+        setPopularSearches(trendingSearches.map(s => s.search_term));
+      } else {
+        setPopularSearches(["Diamond Rings", "Gold Chains", "Bridal Sets", "Mangalsutra"]);
       }
     }
-    fetchCategories();
+    fetchNavData();
   }, []);
 
   useEffect(() => {
@@ -118,7 +142,6 @@ const Navbar = () => {
       const savedPin = localStorage.getItem("user_pincode");
       if (savedPin) setPincode(savedPin);
     };
-
     window.addEventListener("pincodeUpdated", handlePincodeUpdate);
     return () => window.removeEventListener("pincodeUpdated", handlePincodeUpdate);
   }, []);
@@ -151,34 +174,42 @@ const Navbar = () => {
     }
   };
 
-  const handleSearchSubmit = (e?: React.FormEvent, selectedPath?: string) => {
+  const logSearchQuery = async (term: string) => {
+    if (!term || term.trim() === "") return;
+    try {
+      await supabase.rpc('increment_search_count', { term_input: term.toLowerCase().trim() });
+    } catch (e) {}
+  };
+
+  const handleSearchSubmit = (e?: React.FormEvent, selectedPath?: string, exactTerm?: string) => {
     if (e) e.preventDefault();
     setIsSearchFocused(false);
+    setMobileSearchOpen(false); 
+
+    const termToLog = exactTerm || searchQuery;
+    if (termToLog) logSearchQuery(termToLog);
 
     if (selectedPath) {
       navigate(selectedPath); 
     } else {
-      const matchedCategory = categoryLinks.find(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
-      if (matchedCategory) {
-        navigate(matchedCategory.path); 
-      } else {
-        navigate("/"); 
+      if (searchQuery.trim() !== "") {
+         navigate(`/search-results?q=${encodeURIComponent(searchQuery)}`);
       }
     }
     setSearchQuery(""); 
   };
 
   const filteredSearches = searchQuery 
-    ? popularSearches.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 3)
-    : popularSearches.slice(0, 3);
+    ? allAvailableSuggestions.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5)
+    : popularSearches.slice(0, 4); 
 
   const filteredCategories = searchQuery
     ? categoryLinks.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 3)
     : categoryLinks.slice(0, 3);
 
   const filteredProducts = searchQuery
-    ? mockProducts.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.category.includes(searchQuery.toLowerCase())).slice(0, 3)
-    : mockProducts.slice(0, 3);
+    ? trendingProducts.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.category.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 3)
+    : trendingProducts.slice(0, 3);
 
   return (
     <>
@@ -203,20 +234,77 @@ const Navbar = () => {
 
         <div className="container mx-auto px-6 relative z-30 bg-white">
           <div className="flex lg:hidden items-center justify-between h-14">
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="text-gray-800 p-1">
+            <button 
+              onClick={() => { setMobileMenuOpen(!mobileMenuOpen); setMobileSearchOpen(false); }} 
+              className="text-gray-800 p-1 cursor-pointer"
+            >
               {mobileMenuOpen ? <X size={24} strokeWidth={1.5} /> : <Menu size={24} strokeWidth={1.5} />}
             </button>
             <Link to="/" className="absolute left-1/2 transform -translate-x-1/2">
               <h1 className="text-2xl font-serif tracking-widest text-gray-900">Sarvaa</h1>
             </Link>
             <div className="flex items-center gap-3">
-              <Link to="/wishlist"><Heart size={22} strokeWidth={1.5} /></Link>
+              <button 
+                onClick={() => { setMobileSearchOpen(!mobileSearchOpen); setMobileMenuOpen(false); }} 
+                className="text-gray-800 cursor-pointer"
+              >
+                <Search size={20} strokeWidth={1.5} />
+              </button>
+              <Link to="/wishlist"><Heart size={20} strokeWidth={1.5} /></Link>
               <Link to="/cart" className="relative">
-                <ShoppingBag size={22} strokeWidth={1.5} />
+                <ShoppingBag size={20} strokeWidth={1.5} />
                 {cartCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{cartCount}</span>}
               </Link>
             </div>
           </div>
+
+          {/* MOBILE SEARCH BAR DROPDOWN */}
+          <AnimatePresence>
+            {mobileSearchOpen && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }} 
+                animate={{ height: "auto", opacity: 1 }} 
+                exit={{ height: 0, opacity: 0 }}
+                className="lg:hidden overflow-hidden"
+              >
+                 <div className="py-3 border-t border-gray-100">
+                   <form 
+                     onSubmit={(e) => { setMobileSearchOpen(false); handleSearchSubmit(e); }} 
+                     className="relative"
+                   >
+                     <input 
+                       type="text"
+                       autoFocus
+                       value={searchQuery}
+                       onChange={(e) => setSearchQuery(e.target.value)}
+                       placeholder="Search for jewelry..."
+                       className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-rose-400"
+                     />
+                     <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                   </form>
+
+                   {searchQuery && filteredSearches.length > 0 && (
+                     <div className="mt-2 bg-white border border-gray-100 rounded-xl shadow-sm p-2 max-h-48 overflow-y-auto custom-scrollbar">
+                        {filteredSearches.map((suggestion, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => {
+                              setMobileSearchOpen(false);
+                              handleSearchSubmit(undefined, `/search-results?q=${encodeURIComponent(suggestion)}`, suggestion);
+                            }}
+                            className="w-full text-left px-3 py-2.5 text-sm text-gray-700 hover:bg-rose-50 rounded-lg flex items-center gap-3 cursor-pointer transition-colors"
+                          >
+                            <Search size={12} className="text-gray-300" />
+                            <span><span className="font-bold text-rose-600">{suggestion.substring(0, searchQuery.length)}</span>{suggestion.substring(searchQuery.length)}</span>
+                          </button>
+                        ))}
+                     </div>
+                   )}
+                 </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="hidden lg:flex items-center justify-between h-20 gap-6">
             <div className="w-56 flex-shrink-0">
@@ -270,7 +358,7 @@ const Navbar = () => {
                           <div className="flex items-center gap-2 mb-2">
                             <TrendingUp size={14} className="text-rose-500" />
                             <h4 className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                              {searchQuery ? "Suggested Searches" : "Popular Searches"}
+                              {searchQuery ? "Suggested for you" : "Trending Searches"}
                             </h4>
                           </div>
                           <ul className="space-y-1">
@@ -278,7 +366,7 @@ const Navbar = () => {
                               <li key={idx}>
                                 <button
                                   type="button"
-                                  onClick={() => handleSearchSubmit(undefined, "/")} 
+                                  onClick={() => handleSearchSubmit(undefined, `/search-results?q=${encodeURIComponent(suggestion)}`, suggestion)} 
                                   className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors flex items-center gap-3 cursor-pointer"
                                 >
                                   <Search size={12} className="text-gray-300" />
@@ -325,7 +413,7 @@ const Navbar = () => {
                             {filteredProducts.map((product) => (
                               <button 
                                 key={product.id}
-                                onClick={() => handleSearchSubmit(undefined, "/")} 
+                                onClick={() => handleSearchSubmit(undefined, `/product/${product.id}`)} 
                                 className="w-full flex items-center gap-4 group text-left px-2 py-1.5 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                               >
                                 <div className="w-12 h-12 rounded-lg bg-gray-50 overflow-hidden border border-gray-100 flex-shrink-0">
@@ -350,9 +438,7 @@ const Navbar = () => {
               </div>
             </div>
 
-            {/* --- UPGRADED DESKTOP DELIVER TO & ICONS --- */}
             <div className="w-auto flex-shrink-0 flex items-center justify-end gap-6">
-              
               <button 
                 onClick={() => setIsLocationModalOpen(true)} 
                 className="flex items-center gap-2 hover:bg-rose-50 px-2.5 py-1.5 rounded-xl transition-colors group cursor-pointer border border-transparent hover:border-rose-100"
@@ -404,6 +490,7 @@ const Navbar = () => {
           </div>
         </div>
 
+        {/* --- RESTORED MEGA MENU --- */}
         <nav className="hidden lg:block border-t border-gray-200 relative bg-white z-10" onMouseLeave={() => setActiveCategory(null)}>
           <div className="container mx-auto px-6 flex items-center justify-center h-12">
             <ul className="flex items-center gap-8">
@@ -480,7 +567,6 @@ const Navbar = () => {
                 </div>
               )}
               
-              {/* --- UPGRADED MOBILE DELIVER TO --- */}
               <div className="bg-gray-50 mx-4 my-4 rounded-xl p-3.5 flex items-center justify-between border border-gray-200 cursor-pointer active:bg-gray-100 transition-colors" onClick={() => setIsLocationModalOpen(true)}>
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm text-gray-600 border border-gray-100">
@@ -509,24 +595,21 @@ const Navbar = () => {
         </AnimatePresence>
       </header>
 
-      {/* --- UPGRADED MODAL --- */}
+      {/* MODAL */}
       <AnimatePresence>
         {isLocationModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsLocationModalOpen(false)} className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden text-center">
-              
               <div className="absolute top-4 right-4">
                 <button onClick={() => setIsLocationModalOpen(false)} className="text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-full p-1 transition-colors cursor-pointer"><X size={20} strokeWidth={2.5}/></button>
               </div>
-
               <div className="p-8 pt-10 text-center">
                 <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-5">
                   <MapPin size={28} className="text-rose-600" strokeWidth={1.5} />
                 </div>
                 <h4 className="font-serif text-2xl text-gray-900 mb-2">Where are we shipping?</h4>
                 <p className="text-gray-500 text-xs mb-8 px-4 leading-relaxed">Enter your pincode to check estimated delivery times and product availability.</p>
-                
                 <form onSubmit={handleLocationUpdate}>
                   <div className="flex bg-gray-50 border border-gray-200 rounded-xl p-1.5 focus-within:border-rose-400 focus-within:ring-4 focus-within:ring-rose-50 transition-all">
                     <input 

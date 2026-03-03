@@ -7,6 +7,7 @@ import Footer from "@/components/layout/Footer";
 import { useCart } from "@/context/CartContext";
 import { supabase } from "../../supabase"; 
 import emailjs from '@emailjs/browser';
+import { Helmet } from "react-helmet-async";
 
 const CheckoutPage = () => {
   const { state } = useLocation();
@@ -376,6 +377,13 @@ Please let me know how to proceed with the payment. Thank you!`;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FCFCFC] font-sans relative">
+      
+      <Helmet>
+              <title>Checkout Page | Sarvaa Fine Jewelry</title>
+              <meta name="robots" content="noindex, nofollow" />
+            </Helmet>
+
+
       <Navbar />
 
       <main className="flex-grow container mx-auto px-4 py-8 lg:py-10 max-w-6xl">

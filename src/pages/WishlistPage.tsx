@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { Trash2, ShoppingBag } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { useCart } from "@/context/CartContext"; // 1. Import Hook
+import { useCart } from "@/context/CartContext"; 
+import { Helmet } from "react-helmet-async";
 
 const WishlistPage = () => {
   // 2. Get Real Data from Global State
@@ -16,6 +17,10 @@ const WishlistPage = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
+      <Helmet>
+              <title>Wishlist| Sarvaa Fine Jewelry</title>
+              <meta name="robots" content="noindex, nofollow" />
+            </Helmet>
       <Navbar />
 
       <main className="flex-grow container mx-auto px-4 py-10 lg:py-16">

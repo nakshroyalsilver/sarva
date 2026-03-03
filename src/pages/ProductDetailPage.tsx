@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag, PlayCircle, Bell, Info } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { products as localProducts } from "@/data/products"; 
 import { useCart } from "@/context/CartContext"; 
 import { supabase } from "../../supabase"; 
 import ProductReviews from "@/components/home/ProductReviews";
+import { Helmet } from "react-helmet-async";
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -35,7 +35,6 @@ const ProductDetailPage = () => {
   const [showNotifyPopup, setShowNotifyPopup] = useState(false);
   const [stockAlertMessage, setStockAlertMessage] = useState<string | null>(null);
   
-  // NEW: State to track if the item is already waitlisted
   const [isNotified, setIsNotified] = useState(false);
 
   const [isZooming, setIsZooming] = useState(false);
@@ -99,22 +98,19 @@ const ProductDetailPage = () => {
     fetchOffers();
   }, []);
 
-  const localProduct = localProducts.find((p) => p.id === id);
-  const product = dbProduct || localProduct || localProducts[0];
-  const isWishlisted = wishlistItems.some((item) => item.id === product.id);
-  const similarProducts = dbSimilar.length > 0 ? dbSimilar : [...localProducts, ...localProducts].filter(p => p.category === product.category && p.id !== product.id).slice(0, 8);
+  // --- STRICTLY SUPABASE DATA NOW ---
+  const product = dbProduct;
+  const similarProducts = dbSimilar;
 
-  const images = (product.image_urls && product.image_urls.length > 0)
-    ? product.image_urls
-    : (product.image ? [product.image] : []);
+  const isWishlisted = product ? wishlistItems.some((item) => item.id === product.id) : false;
 
-  const currentStock = dbProduct 
-    ? Number(dbProduct.stock_quantity) 
-    : (product.stock_quantity !== undefined ? Number(product.stock_quantity) : 10);
-    
+  const images = product 
+    ? ((product.image_urls && product.image_urls.length > 0) ? product.image_urls : (product.image ? [product.image] : []))
+    : [];
+
+  const currentStock = product ? Number(product.stock_quantity) : 0;
   const isOutOfStock = currentStock <= 0;
 
-  // NEW: Check on load if this item was already waitlisted by the user
   useEffect(() => {
     if (product?.id) {
       const waitlistedItems = JSON.parse(localStorage.getItem("waitlistedProducts") || "[]");
@@ -122,8 +118,8 @@ const ProductDetailPage = () => {
     }
   }, [product?.id]);
 
-  const existingCartQty = Array.isArray(cartItems) 
-    ? cartItems.filter(item => item.id === product.id).reduce((sum, item) => sum + (item.qty || 1), 0)
+  const existingCartQty = (Array.isArray(cartItems) && product?.id)
+    ? cartItems.filter((item: any) => item.id === product.id).reduce((sum: number, item: any) => sum + (item.qty || 1), 0)
     : 0;
 
   const triggerStockAlert = (msg: string) => {
@@ -137,6 +133,7 @@ const ProductDetailPage = () => {
   };
 
   const validateAndGetSize = () => {
+    if (!product) return false;
     if ((product.category === 'rings' || product.category === 'ring') && !selectedSize) {
       setSizeError(true);
       document.getElementById('size-selector')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -147,7 +144,7 @@ const ProductDetailPage = () => {
   };
 
   const handleAddToCart = () => {
-    if (isOutOfStock) return; 
+    if (isOutOfStock || !product) return; 
     if (!validateAndGetSize()) return;
 
     if (existingCartQty + quantity > currentStock) {
@@ -163,7 +160,7 @@ const ProductDetailPage = () => {
   };
 
   const handleBuyNow = () => {
-    if (isOutOfStock) return; 
+    if (isOutOfStock || !product) return; 
     if (!validateAndGetSize()) return;
 
     if (existingCartQty + quantity > currentStock) {
@@ -178,7 +175,7 @@ const ProductDetailPage = () => {
   };
 
   const handleNotifyMe = async () => {
-    if (isNotified) return;
+    if (isNotified || !product) return;
 
     const storedUser = localStorage.getItem("currentUser");
     
@@ -190,7 +187,6 @@ const ProductDetailPage = () => {
 
     const user = JSON.parse(storedUser);
 
-    // Push to Supabase Waitlist
     const { error } = await supabase.from('waitlist').insert([{
       product_id: product.id,
       product_name: product.title || product.name,
@@ -200,14 +196,11 @@ const ProductDetailPage = () => {
 
     if (!error) {
       setIsNotified(true);
-
-      // Save to localStorage so it syncs with the grid cards
       const waitlistedItems = JSON.parse(localStorage.getItem("waitlistedProducts") || "[]");
       if (!waitlistedItems.includes(product.id)) {
         waitlistedItems.push(product.id);
         localStorage.setItem("waitlistedProducts", JSON.stringify(waitlistedItems));
       }
-
       setShowNotifyPopup(true);
       setTimeout(() => setShowNotifyPopup(false), 3500); 
     } else {
@@ -242,8 +235,61 @@ const ProductDetailPage = () => {
     )
   }
 
+  // Safe Fallback if product doesn't exist in Supabase
+  if (!product) {
+    return (
+      <div className="bg-white min-h-screen flex flex-col font-sans text-gray-900">
+        <Navbar />
+        <main className="flex-grow container mx-auto px-4 py-20 flex flex-col items-center justify-center text-center">
+          <h2 className="text-2xl font-serif mb-2">Product Not Found</h2>
+          <p className="text-gray-500 mb-6">The item you are looking for may have been removed or is currently unavailable.</p>
+          <Link to="/" className="bg-rose-600 text-white px-8 py-3 rounded text-sm font-bold uppercase tracking-widest hover:bg-rose-700 transition-colors shadow-lg shadow-rose-200">
+            Back to Home
+          </Link>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white min-h-screen flex flex-col font-sans text-gray-900 relative">
+      
+      <Helmet>
+        <title>{product.name} | Sarvaa Fine Jewelry</title>
+        <meta name="description" content={product.short_description || `Discover the beautifully handcrafted ${product.name} at Sarvaa Fine Jewelry.`} />
+        <link rel="canonical" href={`https://sarvaajewelry.com/product/${product.id}`} />
+        
+        <meta property="og:title" content={`${product.name} | Sarvaa Fine Jewelry`} />
+        <meta property="og:description" content={product.short_description || `Discover the beautifully handcrafted ${product.name} at Sarvaa Fine Jewelry.`} />
+        <meta property="og:image" content={images[0] || 'https://sarvaajewelry.com/default-share-image.jpg'} />
+        <meta property="og:url" content={`https://sarvaajewelry.com/product/${product.id}`} />
+        <meta property="og:type" content="product" />
+
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org/",
+            "@type": "Product",
+            "name": product.name,
+            "image": images,
+            "description": product.short_description || `Premium handcrafted ${product.name} from Sarvaa.`,
+            "sku": product.id,
+            "offers": {
+              "@type": "Offer",
+              "url": `https://sarvaajewelry.com/product/${product.id}`,
+              "priceCurrency": "INR",
+              "price": product.price,
+              "availability": isOutOfStock ? "https://schema.org/OutOfStock" : "https://schema.org/InStock"
+            },
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": product.rating || 4.8,
+              "reviewCount": product.reviews || 124
+            }
+          })}
+        </script>
+      </Helmet>
+
       <Navbar />
 
       <main className="flex-grow container mx-auto px-4 py-6 lg:py-10">
@@ -401,7 +447,6 @@ const ProductDetailPage = () => {
                  <div className={`w-5 h-5 border-2 rounded flex items-center justify-center ${isGiftWrapped ? "bg-rose-600 border-rose-600" : "border-gray-300"} ${isOutOfStock ? 'opacity-50' : ''}`}>{isGiftWrapped && <Check size={12} className="text-white" />}</div>
               </div>
 
-              {/* DESKTOP ADD TO CART / NOTIFY ME */}
               <div className="hidden lg:flex gap-3 h-12">
                  {isOutOfStock ? (
                    <button 
@@ -494,7 +539,6 @@ const ProductDetailPage = () => {
         </div>
       </main>
 
-      {/* MOBILE ADD TO CART / NOTIFY ME */}
       <div className="fixed bottom-0 left-0 right-0 bg-white z-50 p-3 border-t border-gray-100 flex gap-3 lg:hidden shadow-[0_-4px_15px_rgba(0,0,0,0.05)] pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
          {isOutOfStock ? (
            <button 
