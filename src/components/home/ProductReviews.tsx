@@ -1,14 +1,17 @@
-import { useState, useEffect } from "react";
-import { Star, User, MessageSquare } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Star, MessageSquare, CheckCircle2 } from "lucide-react";
 import { supabase } from "../../../supabase"; 
 import { motion, AnimatePresence } from "framer-motion";
+// Ensure this helper exists in your project
+import { getReviewsForProduct } from "@/data/mockReviews"; 
 
 interface ProductReviewsProps {
   productId: string;
+  categoryName?: string; // Passed from ProductDetailPage
 }
 
-const ProductReviews = ({ productId }: ProductReviewsProps) => {
-  const [reviews, setReviews] = useState<any[]>([]);
+const ProductReviews = ({ productId, categoryName = "" }: ProductReviewsProps) => {
+  const [dbReviews, setDbReviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
@@ -19,7 +22,6 @@ const ProductReviews = ({ productId }: ProductReviewsProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Auto-fill name if logged in
     const storedUser = localStorage.getItem("currentUser");
     if (storedUser) {
       setUserName(JSON.parse(storedUser).name);
@@ -36,10 +38,30 @@ const ProductReviews = ({ productId }: ProductReviewsProps) => {
       .order('created_at', { ascending: false });
 
     if (!error && data) {
-      setReviews(data);
+      setDbReviews(data);
     }
     setLoading(false);
   };
+
+  // --- LOGIC: Combine DB reviews with Category-Specific Mock reviews ---
+  const allReviews = useMemo(() => {
+    // 1. Get the 3 category-specific mock reviews
+    const mocks = getReviewsForProduct(productId, categoryName);
+    
+    // 2. Format Mocks to match your Database schema
+    const formattedMocks = mocks.map(m => ({
+      id: m.id,
+      user_name: m.author,
+      rating: m.rating,
+      comment: m.content,
+      created_at: new Date(Date.now() - 1000000).toISOString(),
+      is_mock: true, // Flag to identify them
+      verified: m.verified
+    }));
+
+    // 3. Merge: Real reviews first, then Mocks
+    return [...dbReviews, ...formattedMocks];
+  }, [dbReviews, productId, categoryName]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,16 +79,13 @@ const ProductReviews = ({ productId }: ProductReviewsProps) => {
       setComment("");
       setRating(5);
       setShowForm(false);
-      fetchReviews(); // Refresh the list
-    } else {
-      alert("Failed to submit review. Please try again.");
+      fetchReviews();
     }
     setIsSubmitting(false);
   };
 
-  // Calculate Average Rating
-  const averageRating = reviews.length > 0 
-    ? (reviews.reduce((acc, rev) => acc + rev.rating, 0) / reviews.length).toFixed(1)
+  const averageRating = allReviews.length > 0 
+    ? (allReviews.reduce((acc, rev) => acc + rev.rating, 0) / allReviews.length).toFixed(1)
     : "5.0";
 
   return (
@@ -84,13 +103,13 @@ const ProductReviews = ({ productId }: ProductReviewsProps) => {
                 ))}
               </div>
               <span className="text-sm font-bold text-gray-900">{averageRating} out of 5</span>
-              <span className="text-xs text-gray-400 font-medium">({reviews.length} {reviews.length === 1 ? 'Review' : 'Reviews'})</span>
+              <span className="text-xs text-gray-400 font-medium">({allReviews.length} Reviews)</span>
             </div>
           </div>
 
           <button 
             onClick={() => setShowForm(!showForm)}
-            className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors w-fit"
+            className="bg-gray-900 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors w-fit cursor-pointer"
           >
             {showForm ? "Cancel" : "Write a Review"}
           </button>
@@ -99,40 +118,19 @@ const ProductReviews = ({ productId }: ProductReviewsProps) => {
         {/* WRITE REVIEW FORM */}
         <AnimatePresence>
           {showForm && (
-            <motion.div 
-              initial={{ height: 0, opacity: 0 }} 
-              animate={{ height: "auto", opacity: 1 }} 
-              exit={{ height: 0, opacity: 0 }}
-              className="overflow-hidden mb-10"
-            >
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-10">
               <form onSubmit={handleSubmit} className="bg-gray-50 border border-gray-100 p-6 md:p-8 rounded-2xl">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-gray-800 mb-6">Share Your Experience</h3>
-                
-                <div className="mb-6">
-                  <label className="text-[10px] uppercase font-bold text-gray-500 block mb-2">Overall Rating *</label>
-                  <div className="flex gap-2">
+                <div className="flex gap-2 mb-4">
                     {[1, 2, 3, 4, 5].map((star) => (
-                      <button type="button" key={star} onClick={() => setRating(star)} className="focus:outline-none transition-transform hover:scale-110">
-                        <Star size={28} fill={star <= rating ? "#e11d48" : "none"} className={star <= rating ? "text-rose-600" : "text-gray-300"} strokeWidth={1} />
+                      <button type="button" key={star} onClick={() => setRating(star)} className="cursor-pointer">
+                        <Star size={24} fill={star <= rating ? "#e11d48" : "none"} className={star <= rating ? "text-rose-600" : "text-gray-300"} />
                       </button>
                     ))}
-                  </div>
                 </div>
-
-                <div className="grid md:grid-cols-2 gap-6 mb-6">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-gray-500 block mb-2">Your Name *</label>
-                    <input required type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="How should we call you?" className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-rose-500 transition-colors" />
-                  </div>
-                </div>
-
-                <div className="mb-8">
-                  <label className="text-[10px] uppercase font-bold text-gray-500 block mb-2">Your Review *</label>
-                  <textarea required value={comment} onChange={(e) => setComment(e.target.value)} placeholder="What did you love about this piece?" rows={4} className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-rose-500 transition-colors resize-none" />
-                </div>
-
+                <input required type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Your Name" className="w-full mb-4 p-3 rounded-xl border border-gray-200 outline-none focus:border-rose-500 bg-white" />
+                <textarea required value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Your Thoughts..." rows={4} className="w-full mb-6 p-3 rounded-xl border border-gray-200 outline-none focus:border-rose-500 bg-white resize-none" />
                 <div className="flex justify-end">
-                  <button type="submit" disabled={isSubmitting} className="bg-rose-600 text-white px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-rose-700 transition-colors disabled:opacity-50 shadow-md shadow-rose-200">
+                  <button type="submit" disabled={isSubmitting} className="bg-rose-600 text-white px-8 py-3 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-rose-700 disabled:opacity-50">
                     {isSubmitting ? "Submitting..." : "Submit Review"}
                   </button>
                 </div>
@@ -142,43 +140,40 @@ const ProductReviews = ({ productId }: ProductReviewsProps) => {
         </AnimatePresence>
 
         {/* REVIEWS LIST */}
-        <div className="space-y-6">
+        <div className="grid md:grid-cols-2 gap-6">
           {loading ? (
-            <p className="text-center text-sm text-gray-400 py-10">Loading reviews...</p>
-          ) : reviews.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-2xl border border-gray-100 border-dashed">
-              <MessageSquare size={32} className="mx-auto text-gray-300 mb-3" strokeWidth={1.5} />
-              <p className="text-gray-500 text-sm font-medium">No reviews yet. Be the first to share your thoughts!</p>
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-2 gap-6">
-              {reviews.map((review) => (
-                <div key={review.id} className="bg-white p-6 rounded-2xl border border-gray-100 hover:border-rose-100 hover:shadow-lg hover:shadow-rose-50/50 transition-all duration-300">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center font-bold uppercase border border-rose-100">
-                        {review.user_name.charAt(0)}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-gray-900">{review.user_name}</h4>
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-medium mt-0.5">
-                          {new Date(review.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-0.5 text-rose-500">
-                      {[...Array(5)].map((_, i) => (
-                        <Star key={i} size={12} fill={i < review.rating ? "currentColor" : "none"} strokeWidth={1.5} className={i < review.rating ? "" : "text-gray-300"} />
-                      ))}
-                    </div>
+            <p className="col-span-2 text-center text-sm text-gray-400 py-10">Loading reviews...</p>
+          ) : allReviews.map((review) => (
+            <div key={review.id} className="bg-white p-6 rounded-2xl border border-gray-100 hover:border-rose-100 transition-all duration-300">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center font-bold border border-rose-100">
+                    {review.user_name.charAt(0)}
                   </div>
-                  <p className="text-sm text-gray-600 leading-relaxed">"{review.comment}"</p>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                      {review.user_name}
+                      {review.verified && (
+                        <span className="text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded flex items-center gap-1 font-medium">
+                          <CheckCircle2 size={10} /> Verified
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {review.is_mock ? 'Recent Purchase' : new Date(review.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
                 </div>
-              ))}
+                <div className="flex gap-0.5 text-rose-500">
+                  {[...Array(5)].map((_, i) => (
+                    <Star key={i} size={12} fill={i < review.rating ? "currentColor" : "none"} strokeWidth={1.5} className={i < review.rating ? "" : "text-gray-300"} />
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 leading-relaxed italic">"{review.comment}"</p>
             </div>
-          )}
+          ))}
         </div>
-
       </div>
     </div>
   );

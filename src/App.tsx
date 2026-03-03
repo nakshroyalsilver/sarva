@@ -17,10 +17,10 @@ import LoginPage from "./pages/LoginPage";
 import CorporatePage from "./pages/CorporatePage";
 import SearchPage from "./pages/SearchPage";
 import SearchResultsPage from "./pages/SearchResultsPage";
-
-// --- NEW COMPONENT IMPORTS ---
 import PincodeModal from "../src/components/home/PincodeModal";
-import MyOrders from "./pages/MyOrders"; // <-- Added MyOrders Import
+import MyOrders from "./pages/MyOrders"; 
+import PriceFilteredPage from "./pages/PriceFilteredPage";
+import GiftCollectionPage from "./pages/GiftCollectionPage";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +48,8 @@ const App = () => (
               <Route path="/login" element={<LoginPage />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/search-results" element={<SearchResultsPage />} />
+              <Route path="/shop/price/:maxPrice" element={<PriceFilteredPage />} />
+              <Route path="/gifts/curated" element={<GiftCollectionPage />} />
               
               {/* --- ADDED MY ORDERS ROUTE --- */}
               <Route path="/my-orders" element={<MyOrders />} />

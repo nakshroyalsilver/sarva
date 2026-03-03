@@ -1,35 +1,31 @@
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 
-// Updated with verified, high-quality jewelry specific images
+
 const giftCollections = [
   { 
     title: "For Her", 
     subtitle: "Gifts she'll adore forever",
-    // Image: Elegant woman wearing silver necklace
     img: "https://images.unsplash.com/photo-1602751584552-8ba73aad10e1?w=600&q=80", 
-    link: "/gifts/her" 
+    link: "/gifts/curated" // <--- CHANGED
   },
   { 
     title: "For Mom", 
     subtitle: "Timeless elegance",
-    // Image: Sophisticated pearl/silver close-up
     img: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=600&q=80", 
-    link: "/gifts/mom" 
+    link: "/gifts/curated" // <--- CHANGED
   },
   { 
     title: "For Him", 
     subtitle: "Bold & Minimalist",
-    // Image: Man wearing silver rings/chain (Urban style)
     img: "https://images.unsplash.com/photo-1617038220319-276d3cfab638?w=600&q=80", 
-    link: "/gifts/him" 
+    link: "/artistry-takes-time" // (Keep this one pointing to the Artistry page if you prefer)
   },
   { 
     title: "For Sister", 
     subtitle: "Trendy & Fun",
-    // Image: Stacked bracelets/charms (Youthful vibe)
     img: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=600&q=80", 
-    link: "/gifts/sister" 
+    link: "/gifts/curated" // <--- CHANGED
   },
 ];
 
@@ -86,9 +82,6 @@ const GiftingSection = () => {
             </Link>
           ))}
         </div>
-
-        
-        
 
       </div>
     </section>

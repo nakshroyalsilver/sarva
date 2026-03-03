@@ -8,7 +8,28 @@ import { useCart } from "@/context/CartContext";
 import { supabase } from "../../supabase"; 
 import ProductReviews from "@/components/home/ProductReviews";
 import { Helmet } from "react-helmet-async";
-import { useQuery } from "@tanstack/react-query"; // <-- ADDED IMPORT
+import { useQuery } from "@tanstack/react-query";
+
+// --- CUSTOM QUILL HTML STYLING ---
+// This safely restores margins, lists, and headings inside Quill content
+// It ensures your admin editor formatting perfectly matches the public view
+const quillStyles = `
+  text-sm text-gray-600 leading-relaxed
+  [&_p]:mb-4 last:[&_p]:mb-0
+  
+  /* FIX: Forces bold text to be truly bold and dark black, overriding pasted styles */
+  [&_strong]:!font-bold [&_strong]:!text-black [&_b]:!font-bold [&_b]:!text-black
+  
+  [&_em]:italic [&_i]:italic
+  [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4
+  [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-4
+  [&_li]:mb-1.5
+  [&_h1]:text-xl [&_h1]:font-serif [&_h1]:mb-4 [&_h1]:text-gray-900
+  [&_h2]:text-lg [&_h2]:font-serif [&_h2]:mb-3 [&_h2]:text-gray-900
+  [&_h3]:text-base [&_h3]:font-bold [&_h3]:mb-2 [&_h3]:text-gray-900
+  [&_a]:text-rose-600 [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-rose-700
+  [&_blockquote]:border-l-4 [&_blockquote]:border-gray-200 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-4
+`;
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -35,13 +56,11 @@ const ProductDetailPage = () => {
   const [zoomStyle, setZoomStyle] = useState({});
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
-  // --- 1. TANSTACK QUERY: FETCH PRODUCT & SIMILAR ITEMS ---
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ['product', id], // Caches based on the exact product ID
+    queryKey: ['product', id],
     queryFn: async () => {
       if (!id) throw new Error("Product ID is missing");
       
-      // Fetch Product
       const { data: prodData, error: prodError } = await supabase
         .from('products')
         .select('*, categories(name, slug)')
@@ -61,7 +80,6 @@ const ProductDetailPage = () => {
         reviews: 124 
       };
 
-      // Fetch Similar
       let formattedSimilar: any[] = [];
       if (prodData.category_id) {
         const { data: simData } = await supabase
@@ -85,10 +103,9 @@ const ProductDetailPage = () => {
       return { product: formattedProduct, similarProducts: formattedSimilar };
     },
     enabled: !!id,
-    staleTime: 1000 * 60 * 5, // Keep fresh for 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
 
-  // --- 2. TANSTACK QUERY: FETCH OFFERS ---
   const { data: availableOffers = [] } = useQuery({
     queryKey: ['activeOffers'],
     queryFn: async () => {
@@ -100,14 +117,12 @@ const ProductDetailPage = () => {
         .limit(3);
       return data || [];
     },
-    staleTime: 1000 * 60 * 30, // Keep fresh for 30 minutes
+    staleTime: 1000 * 60 * 30,
   });
 
-  // Extract the data from TanStack Query
   const product = pageData?.product;
   const similarProducts = pageData?.similarProducts || [];
 
-  // Reset visual states when the ID changes (user clicked a similar product)
   useEffect(() => {
     window.scrollTo(0, 0);
     setActiveImage(0);
@@ -249,7 +264,6 @@ const ProductDetailPage = () => {
     )
   }
 
-  // Safe Fallback if product doesn't exist in Supabase
   if (!product) {
     return (
       <div className="bg-white min-h-screen flex flex-col font-sans text-gray-900">
@@ -268,40 +282,15 @@ const ProductDetailPage = () => {
 
   return (
     <div className="bg-white min-h-screen flex flex-col font-sans text-gray-900 relative">
-      
       <Helmet>
         <title>{product.name} | Sarvaa Fine Jewelry</title>
         <meta name="description" content={product.short_description || `Discover the beautifully handcrafted ${product.name} at Sarvaa Fine Jewelry.`} />
         <link rel="canonical" href={`https://sarvaajewelry.com/product/${product.id}`} />
-        
         <meta property="og:title" content={`${product.name} | Sarvaa Fine Jewelry`} />
         <meta property="og:description" content={product.short_description || `Discover the beautifully handcrafted ${product.name} at Sarvaa Fine Jewelry.`} />
         <meta property="og:image" content={images[0] || 'https://sarvaajewelry.com/default-share-image.jpg'} />
         <meta property="og:url" content={`https://sarvaajewelry.com/product/${product.id}`} />
         <meta property="og:type" content="product" />
-
-        <script type="application/ld+json">
-          {JSON.stringify({
-            "@context": "https://schema.org/",
-            "@type": "Product",
-            "name": product.name,
-            "image": images,
-            "description": product.short_description || `Premium handcrafted ${product.name} from Sarvaa.`,
-            "sku": product.id,
-            "offers": {
-              "@type": "Offer",
-              "url": `https://sarvaajewelry.com/product/${product.id}`,
-              "priceCurrency": "INR",
-              "price": product.price,
-              "availability": isOutOfStock ? "https://schema.org/OutOfStock" : "https://schema.org/InStock"
-            },
-            "aggregateRating": {
-              "@type": "AggregateRating",
-              "ratingValue": product.rating || 4.8,
-              "reviewCount": product.reviews || 124
-            }
-          })}
-        </script>
       </Helmet>
 
       <Navbar />
@@ -327,14 +316,7 @@ const ProductDetailPage = () => {
                 className={`flex-1 relative aspect-square bg-gray-50 rounded-xl overflow-hidden group border border-gray-100 ${activeImage !== -1 ? 'cursor-crosshair' : ''}`}
               >
                  {activeImage === -1 && product.video_url ? (
-                   <video 
-                     src={product.video_url} 
-                     controls 
-                     autoPlay 
-                     muted 
-                     loop 
-                     className="w-full h-full object-cover"
-                   />
+                   <video src={product.video_url} controls autoPlay muted loop className="w-full h-full object-cover"/>
                  ) : (
                    <img 
                      src={images[activeImage] || 'https://via.placeholder.com/800'} 
@@ -456,7 +438,10 @@ const ProductDetailPage = () => {
               <div className="mb-6 border rounded-lg p-3 flex items-center justify-between transition-colors hover:border-rose-200" onClick={() => !isOutOfStock && setIsGiftWrapped(!isGiftWrapped)}>
                  <div className={`flex items-center gap-3 ${isOutOfStock ? 'opacity-50' : 'cursor-pointer'}`}>
                    <div className="bg-white p-2 rounded-full text-rose-500 shadow-sm border border-rose-100"><Gift size={20} /></div>
-                   <div><p className="text-sm font-bold text-gray-900">Make it a Gift</p><p className="text-[10px] text-gray-500">Premium wrap + Message card (₹50)</p></div>
+                   <div>
+                     <p className="text-sm font-bold text-gray-900">Make it a Gift</p>
+                     <p className="text-[10px] text-green-600 font-bold uppercase tracking-wider mt-0.5">Premium wrap + Message card (Free)</p>
+                   </div>
                  </div>
                  <div className={`w-5 h-5 border-2 rounded flex items-center justify-center ${isGiftWrapped ? "bg-rose-600 border-rose-600" : "border-gray-300"} ${isOutOfStock ? 'opacity-50' : ''}`}>{isGiftWrapped && <Check size={12} className="text-white" />}</div>
               </div>
@@ -515,10 +500,11 @@ const ProductDetailPage = () => {
             </div>
 
             <div className="border-t border-gray-100 pt-2">
+               {/* 1. Description Accordion */}
                <AccordionItem title="Product Description">
                  {product.detail_description ? (
                    <div 
-                     className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap [&_strong]:font-bold [&_b]:font-bold [&_em]:italic [&_ul]:list-disc [&_ul]:ml-5 [&_ol]:list-decimal [&_ol]:ml-5 [&_a]:text-rose-600 [&_a]:underline [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-bold [&_h3]:font-bold"
+                     className={quillStyles}
                      dangerouslySetInnerHTML={{ __html: product.detail_description }} 
                    />
                  ) : (
@@ -528,13 +514,32 @@ const ProductDetailPage = () => {
                  )}
                </AccordionItem>
                
+               {/* 2. Specifications Accordion */}
                <AccordionItem title="Product Specifications">
-                 <ul className="text-sm text-gray-500 space-y-2">
-                   <li><strong>Material:</strong> 925 Sterling Silver</li>
-                 </ul>
+                 {product.specifications ? (
+                   <div 
+                     className={quillStyles}
+                     dangerouslySetInnerHTML={{ __html: product.specifications }} 
+                   />
+                 ) : (
+                   <ul className="text-sm text-gray-500 space-y-2">
+                     <li><strong>Material:</strong> 925 Sterling Silver</li>
+                     <li><strong>Type:</strong> {product.type || 'Fine Jewelry'}</li>
+                   </ul>
+                 )}
                </AccordionItem>
                
-               <AccordionItem title="Shipping & Returns"><p className="text-sm text-gray-500">Free shipping on orders above ₹999. Easy 30-day returns.</p></AccordionItem>
+               {/* 3. Shipping & Returns Accordion */}
+               <AccordionItem title="Shipping & Returns">
+                 {product.shipping_returns ? (
+                   <div 
+                     className={quillStyles}
+                     dangerouslySetInnerHTML={{ __html: product.shipping_returns }} 
+                   />
+                 ) : (
+                   <p className="text-sm text-gray-500 leading-relaxed">Free shipping on orders above ₹999. Easy 30-day returns. Delivered within 3-5 business days.</p>
+                 )}
+               </AccordionItem>
             </div>
 
             <div className="border-t border-gray-100 pt-6">
@@ -553,6 +558,7 @@ const ProductDetailPage = () => {
         </div>
       </main>
 
+      {/* MOBILE BOTTOM NAV */}
       <div className="fixed bottom-0 left-0 right-0 bg-white z-50 p-3 border-t border-gray-100 flex gap-3 lg:hidden shadow-[0_-4px_15px_rgba(0,0,0,0.05)] pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
          {isOutOfStock ? (
            <button 
@@ -618,7 +624,10 @@ const ProductDetailPage = () => {
         )}
       </AnimatePresence>
       
-      <ProductReviews productId={product.id} />
+      <ProductReviews 
+        productId={product.id} 
+        categoryName={product.categories?.name || ""} 
+      />
 
       <Footer />
     </div>
@@ -638,7 +647,7 @@ const AccordionItem = ({ title, children }: { title: string, children: React.Rea
           <motion.div key="content" initial="collapsed" animate="open" exit="collapsed"
             variants={{ open: { opacity: 1, height: "auto", marginBottom: 16 }, collapsed: { opacity: 0, height: 0, marginBottom: 0 } }}
             transition={{ duration: 0.3 }} className="overflow-hidden">
-            <div className="text-xs text-gray-500 leading-relaxed">{children}</div>
+            <div className="pt-2 pb-2">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
