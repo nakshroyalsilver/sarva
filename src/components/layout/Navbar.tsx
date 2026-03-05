@@ -621,7 +621,7 @@ const Navbar = () => {
                       onChange={(e) => setTempPincode(e.target.value.replace(/\D/g, ''))} 
                       autoFocus 
                     />
-                    <button type="submit" disabled={tempPincode.length !== 6} className="bg-rose-600 text-white px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-rose-700 disabled:bg-gray-300 disabled:text-gray-500 transition-colors cursor-pointer shadow-md">Apply</button>
+                    <button type="submit" disabled={tempPincode.length !== 6} className="bg-rose-600 text-white px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-rose-700 disabled:bg-gray-300 disabled:text-gray-500 transition-colors cursor-pointer shadow-md">Apply</button>
                   </div>
                 </form>
               </div>
