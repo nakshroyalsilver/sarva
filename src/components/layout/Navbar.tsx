@@ -125,12 +125,34 @@ const Navbar = () => {
     fetchNavData();
   }, []);
 
+  // --- FIXED: Live User Auth Listener ---
   useEffect(() => {
+    // 1. Initial quick check
     const storedUser = localStorage.getItem("currentUser");
     if (storedUser) setUser(JSON.parse(storedUser));
+
+    // 2. Listen to live Supabase auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
+        const userData = { name: userName, email: session.user.email };
+        
+        setUser(userData);
+        localStorage.setItem("currentUser", JSON.stringify(userData));
+        localStorage.setItem("isLoggedIn", "true");
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("isLoggedIn");
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogout = () => {
+  // --- FIXED: Handle Logout properly via Supabase ---
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem("currentUser");
     localStorage.removeItem("isLoggedIn");
     setUser(null);
