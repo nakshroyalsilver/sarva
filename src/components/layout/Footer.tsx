@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom"; // <-- Added useNavigate
 import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "../../../supabase"; 
 import { 
   Instagram, Facebook, Twitter, Mail, Phone, MapPin, 
-  Truck, ShieldCheck, RefreshCcw, ArrowRight, ChevronDown, Plus, Minus
+  Truck, ShieldCheck, RefreshCcw, ArrowRight, ChevronDown, Plus, Minus, Loader2
 } from "lucide-react";
 
 // --- FAQ DATA ---
@@ -48,7 +49,7 @@ const FAQSection = () => {
               <div key={idx} className="bg-white border border-gray-100 rounded-lg overflow-hidden shadow-sm transition-all hover:border-rose-200">
                 <button 
                   onClick={() => setOpenIndex(isOpen ? null : idx)}
-                  className="w-full flex justify-between items-center p-5 text-left"
+                  className="w-full flex justify-between items-center p-5 text-left cursor-pointer"
                 >
                   <span className={`font-medium text-sm md:text-base ${isOpen ? 'text-rose-600' : 'text-gray-800'}`}>
                     {faq.question}
@@ -82,11 +83,84 @@ const FAQSection = () => {
 
 const Footer = () => {
   const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [message, setMessage] = useState("");
+  
+  const navigate = useNavigate(); // <-- Added router hook for smart navigation
+
+  // Support Links
+  const supportLinks = [
+    { name: 'About Us', path: '/about' },
+    { name: 'Shipping & Returns', path: '/shipping-returns' },
+    { name: 'Terms of Service', path: '/terms-of-service' },
+    { name: 'Privacy Policy', path: '/privacy-policy' },
+    { name: 'Track Order', path: '/track-order' } // We will intercept this one
+  ];
+
+  // --- NEW: Smart Track Order Handler ---
+  const handleTrackOrder = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    try {
+      // Ask Supabase if the user is currently logged in
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // Logged in! Send them to their profile/orders page
+        navigate('/profile'); 
+      } else {
+        // Not logged in! Send them to the login page
+        navigate('/login'); 
+      }
+    } catch (error) {
+      console.error("Auth check failed", error);
+      navigate('/login'); // Fallback to login if something goes wrong
+    }
+  };
+
+  // Newsletter Submission Function
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setStatus("loading");
+    setMessage("");
+
+    try {
+      const { error } = await supabase
+        .from('subscribers')
+        .insert([{ email }]);
+
+      if (error) {
+        if (error.code === '23505') {
+          throw new Error("You are already subscribed!");
+        }
+        throw error;
+      }
+
+      setStatus("success");
+      setMessage("Thanks for subscribing!");
+      setEmail(""); 
+
+      setTimeout(() => {
+        setStatus("idle");
+        setMessage("");
+      }, 4000);
+
+    } catch (err: any) {
+      setStatus("error");
+      setMessage(err.message || "Something went wrong. Please try again.");
+      
+      setTimeout(() => {
+        setStatus("idle");
+        setMessage("");
+      }, 4000);
+    }
+  };
 
   return (
     <footer className="bg-white font-sans text-gray-600">
       
-      {/* 1. FAQ SECTION (Added Here) */}
+      {/* 1. FAQ SECTION */}
       <FAQSection />
 
       {/* 2. ASSURANCE / SERVICE PROMISE */}
@@ -162,11 +236,21 @@ const Footer = () => {
           <div>
             <h4 className="font-bold text-gray-900 text-xs uppercase tracking-[0.15em] mb-6">Support</h4>
             <ul className="space-y-3 text-sm text-gray-500">
-              {['Track Order', 'Return Policy', 'Shipping Info', 'Jewelry Care', 'About Us', 'Contact Us'].map((item) => (
-                <li key={item}>
-                  <Link to={`/${item.toLowerCase().replace(' ', '-')}`} className="hover:text-rose-600 hover:pl-2 transition-all block">
-                    {item}
-                  </Link>
+              {supportLinks.map((item) => (
+                <li key={item.name}>
+                  {/* --- NEW: Intercept 'Track Order' to run the auth check --- */}
+                  {item.name === 'Track Order' ? (
+                    <button 
+                      onClick={handleTrackOrder} 
+                      className="hover:text-rose-600 hover:pl-2 transition-all block text-left cursor-pointer w-full"
+                    >
+                      {item.name}
+                    </button>
+                  ) : (
+                    <Link to={item.path} className="hover:text-rose-600 hover:pl-2 transition-all block">
+                      {item.name}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>
@@ -179,23 +263,38 @@ const Footer = () => {
               <p className="text-xs text-gray-500 mb-4 leading-relaxed">
                 Subscribe to receive updates, access to exclusive deals, and more.
               </p>
-              <div className="relative">
+              
+              {/* Newsletter Form */}
+              <form onSubmit={handleSubscribe} className="relative">
                 <input
                   type="email"
+                  required
+                  disabled={status === "loading"}
                   placeholder="Email Address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-4 py-3 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-all pr-10"
+                  className="w-full bg-white border border-gray-200 rounded-lg px-4 py-3 text-sm outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition-all pr-10 disabled:opacity-50"
                 />
-                <button className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-rose-600 text-white rounded-md hover:bg-rose-700 transition-colors">
-                  <ArrowRight size={16} />
+                <button 
+                  type="submit"
+                  disabled={status === "loading"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-rose-600 text-white rounded-md hover:bg-rose-700 transition-colors cursor-pointer disabled:bg-rose-400"
+                >
+                  {status === "loading" ? <Loader2 size={16} className="animate-spin" /> : <ArrowRight size={16} />}
                 </button>
-              </div>
+              </form>
+              
+              {/* Feedback Message */}
+              {message && (
+                <p className={`mt-2 text-xs font-medium ${status === "error" ? "text-red-500" : "text-green-600"}`}>
+                  {message}
+                </p>
+              )}
             </div>
             
             <div className="mt-6 text-sm text-gray-500 space-y-2">
               <p className="flex items-center gap-2"><Phone size={14} className="text-rose-600"/> +91 98765 43210</p>
-              <p className="flex items-center gap-2"><Mail size={14} className="text-rose-600"/> hello@sarvaa.com</p>
+              <p className="flex items-center gap-2"><Mail size={14} className="text-rose-600"/> nakshroyalsilver@gmail.com</p>
             </div>
           </div>
 

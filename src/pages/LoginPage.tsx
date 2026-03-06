@@ -279,10 +279,10 @@ const LoginPage = () => {
                 </form>
               )}
 
-              <div className="mt-8 pt-6 border-t border-gray-50 flex items-center justify-center gap-2 text-green-700 bg-green-50 py-2 rounded-xl mx-[-10px] mb-[-10px]">
-                  <ShieldCheck size={14} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest">Secure SSL Login</span>
-              </div>
+             <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-center gap-2 text-green-700 bg-green-50 py-2 rounded-xl mx-[-10px] mb-[-10px]">
+  <ShieldCheck size={14} />
+  <span className="text-[10px] font-bold uppercase tracking-widest">Secure SSL Login</span>
+</div>
             </div>
           </div>
         </div>

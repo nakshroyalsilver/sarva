@@ -21,6 +21,10 @@ import PincodeModal from "../src/components/home/PincodeModal";
 import MyOrders from "./pages/MyOrders"; 
 import PriceFilteredPage from "./pages/PriceFilteredPage";
 import GiftCollectionPage from "./pages/GiftCollectionPage";
+import AboutUs from "./pages/AboutUs";
+import ShippingReturns from "./pages/ShippingReturns";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +54,10 @@ const App = () => (
               <Route path="/search-results" element={<SearchResultsPage />} />
               <Route path="/shop/price/:maxPrice" element={<PriceFilteredPage />} />
               <Route path="/gifts/curated" element={<GiftCollectionPage />} />
+              <Route path="/about" element={<AboutUs />} />
+              <Route path="/shipping-returns" element={<ShippingReturns />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
               
               {/* --- ADDED MY ORDERS ROUTE --- */}
               <Route path="/my-orders" element={<MyOrders />} />
