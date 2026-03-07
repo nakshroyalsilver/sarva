@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Star, MessageSquare, CheckCircle2 } from "lucide-react";
+import { Star, MessageSquare, CheckCircle2, User } from "lucide-react"; // <-- Added User icon here
 import { supabase } from "../../../supabase"; 
 import { motion, AnimatePresence } from "framer-motion";
 // Ensure this helper exists in your project
@@ -144,12 +144,16 @@ const ProductReviews = ({ productId, categoryName = "" }: ProductReviewsProps) =
           {loading ? (
             <p className="col-span-2 text-center text-sm text-gray-400 py-10">Loading reviews...</p>
           ) : allReviews.map((review) => (
-            <div key={review.id} className="bg-white p-6 rounded-2xl border border-gray-100 hover:border-rose-100 transition-all duration-300">
+            <div key={review.id} className="bg-white p-6 rounded-2xl border border-gray-100 hover:border-stone-200 transition-all duration-300 shadow-sm hover:shadow-md">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center font-bold border border-rose-100">
-                    {review.user_name.charAt(0)}
+                  
+                  {/* --- NEW PREMIUM AVATAR REPLACEMENT --- */}
+                  <div className="w-10 h-10 rounded-full bg-stone-50 text-stone-400 flex items-center justify-center border border-stone-100 shrink-0">
+                    <User size={18} strokeWidth={1.5} />
                   </div>
+                  {/* --------------------------------------- */}
+
                   <div>
                     <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                       {review.user_name}

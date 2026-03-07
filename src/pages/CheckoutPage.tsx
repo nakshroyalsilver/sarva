@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, Navigate, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, ShieldCheck, CreditCard, Gift, Check, Banknote, ShoppingBag, CheckCircle2, MessageCircle, X, Tag } from "lucide-react";
+import { ArrowLeft, ShieldCheck, CreditCard, Gift, Check, Banknote, ShoppingBag, CheckCircle2, MessageCircle, X, Tag, MapPin, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -36,6 +36,9 @@ const CheckoutPage = () => {
     const saved = localStorage.getItem("checkout_shipping");
     if (saved) return JSON.parse(saved);
 
+    const permanentlySaved = localStorage.getItem("saved_shipping_address");
+    if (permanentlySaved) return JSON.parse(permanentlySaved);
+
     const storedUser = localStorage.getItem("currentUser");
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
@@ -48,25 +51,43 @@ const CheckoutPage = () => {
     return { firstName: "", lastName: "", flat: "", street: "", pincode: "", city: "", state: "" };
   });
 
-  // NEW: Save the applied coupon to local storage
+  // --- BILLING ADDRESS STATE ---
+  const [billingInfo, setBillingInfo] = useState(() => {
+    const saved = localStorage.getItem("checkout_billing");
+    if (saved) return JSON.parse(saved);
+
+    const pending = localStorage.getItem("pending_save_billing");
+    if (pending) return JSON.parse(pending);
+
+    return { firstName: "", lastName: "", flat: "", street: "", city: "", state: "", pincode: "" };
+  });
+
+  const [isBillingSameAsShipping, setIsBillingSameAsShipping] = useState(() => {
+    const savedSame = localStorage.getItem("pending_billing_same");
+    return savedSame ? JSON.parse(savedSame) : true;
+  });
+
+  // --- POPUP STATE ---
+  const [showSaveAddressPrompt, setShowSaveAddressPrompt] = useState(false);
+
+  useEffect(() => {
+    // This deletes the temporary sticky notes so they don't haunt future orders
+    localStorage.removeItem("pending_save_shipping");
+    localStorage.removeItem("pending_save_billing");
+    localStorage.removeItem("pending_billing_same");
+  }, []);
+
+  // Save the applied coupon to local storage
   const [appliedCoupon, setAppliedCoupon] = useState<any | null>(() => {
     const saved = localStorage.getItem("checkout_coupon");
     return saved ? JSON.parse(saved) : null;
   });
 
   // Auto-save changes to localStorage as they type
-  useEffect(() => {
-    localStorage.setItem("checkout_step", activeStep.toString());
-  }, [activeStep]);
-
-  useEffect(() => {
-    localStorage.setItem("checkout_contact", JSON.stringify(contactInfo));
-  }, [contactInfo]);
-
-  useEffect(() => {
-    localStorage.setItem("checkout_shipping", JSON.stringify(shippingInfo));
-  }, [shippingInfo]);
-
+  useEffect(() => { localStorage.setItem("checkout_step", activeStep.toString()); }, [activeStep]);
+  useEffect(() => { localStorage.setItem("checkout_contact", JSON.stringify(contactInfo)); }, [contactInfo]);
+  useEffect(() => { localStorage.setItem("checkout_shipping", JSON.stringify(shippingInfo)); }, [shippingInfo]);
+  useEffect(() => { localStorage.setItem("checkout_billing", JSON.stringify(billingInfo)); }, [billingInfo]);
   useEffect(() => {
     if (appliedCoupon) {
       localStorage.setItem("checkout_coupon", JSON.stringify(appliedCoupon));
@@ -74,7 +95,6 @@ const CheckoutPage = () => {
       localStorage.removeItem("checkout_coupon");
     }
   }, [appliedCoupon]);
-  // ---------------------------------------
   
   const [showGiftMessage, setShowGiftMessage] = useState(false);
   const [giftMessage, setGiftMessage] = useState("");
@@ -89,6 +109,7 @@ const CheckoutPage = () => {
   const [couponError, setCouponError] = useState("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [availableCoupons, setAvailableCoupons] = useState<any[]>([]);
+  const [isLocating, setIsLocating] = useState(false);
 
   useEffect(() => {
     const fetchActiveCoupons = async () => {
@@ -105,9 +126,7 @@ const CheckoutPage = () => {
     fetchActiveCoupons();
   }, []);
 
-  const checkoutItems = state?.directPurchase 
-    ? [state.directPurchase] 
-    : cartItems;
+  const checkoutItems = state?.directPurchase ? [state.directPurchase] : cartItems;
 
   if (!checkoutItems || checkoutItems.length === 0) {
     return <Navigate to="/cart" />;
@@ -118,7 +137,6 @@ const CheckoutPage = () => {
   // ==========================================
   const subtotal = checkoutItems.reduce((acc: number, item: any) => acc + (Number(item.price) * Number(item.qty)), 0);
   
-  // NEW: Safety check if they removed items and cart is now too low for the saved coupon
   useEffect(() => {
     if (appliedCoupon && subtotal < Number(appliedCoupon.min_order_value)) {
       setAppliedCoupon(null);
@@ -137,10 +155,8 @@ const CheckoutPage = () => {
   }
 
   const subtotalAfterCoupon = subtotal - couponDiscountAmount;
-  
   const shipping = subtotalAfterCoupon >= 5000 ? 0 : 99; 
   const amountNeededForFreeShipping = 5000 - subtotalAfterCoupon;
-
   const total = subtotalAfterCoupon + shipping;
   // ==========================================
 
@@ -185,6 +201,55 @@ const CheckoutPage = () => {
     setCouponError("");
   };
 
+  // --- AUTO FILL LOCATION ---
+  const handleAutoFillLocation = (type: 'shipping' | 'billing') => {
+    if (!("geolocation" in navigator)) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          // ADDED HEADERS TO PREVENT OPENSTREETMAP BLOCKING
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`, {
+            headers: {
+              'User-Agent': 'SarvaaJewelryStore/1.0'
+            }
+          });
+          const data = await res.json();
+          
+          if (data && data.address) {
+            const updatedAddress = {
+              street: data.address.road || data.address.suburb || data.address.neighbourhood || "",
+              city: data.address.city || data.address.town || data.address.state_district || "",
+              state: data.address.state || "",
+              pincode: data.address.postcode || "",
+            };
+
+            if (type === 'shipping') {
+              setShippingInfo(prev => ({ ...prev, ...updatedAddress }));
+            } else {
+              setBillingInfo(prev => ({ ...prev, ...updatedAddress }));
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching location details", error);
+          alert("Could not fetch your exact address. Please enter it manually.");
+        } finally {
+          setIsLocating(false);
+        }
+      },
+      (error) => {
+        console.error("Geolocation error", error);
+        alert("Please allow location access in your browser settings to use this feature.");
+        setIsLocating(false);
+      }
+    );
+  };
+
   // --- NAVIGATION HANDLERS ---
   const handleBack = () => {
     if (state?.directPurchase) navigate(-1);
@@ -202,11 +267,41 @@ const CheckoutPage = () => {
 
   const handleContinueToPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (shippingInfo.firstName && shippingInfo.pincode && shippingInfo.flat) {
-      setActiveStep(3);
+    
+    const isShippingValid = shippingInfo.firstName && shippingInfo.pincode && shippingInfo.flat && shippingInfo.street && shippingInfo.city && shippingInfo.state;
+    const isBillingValid = isBillingSameAsShipping || (billingInfo.firstName && billingInfo.pincode && billingInfo.flat && billingInfo.street && billingInfo.city && billingInfo.state);
+
+    if (isShippingValid && isBillingValid) {
+      const alreadySaved = localStorage.getItem("saved_shipping_address");
+      
+      if (!alreadySaved) {
+        setShowSaveAddressPrompt(true);
+      } else {
+        setActiveStep(3);
+      }
     } else {
-      alert("Please fill in all required shipping fields.");
+      alert("Please fill in all required address fields.");
     }
+  };
+
+  const handleSaveAddressChoice = (save: boolean) => {
+    if (save) {
+      const storedUser = localStorage.getItem("currentUser");
+      
+      if (!storedUser) {
+        localStorage.setItem("pending_save_shipping", JSON.stringify(shippingInfo));
+        localStorage.setItem("pending_save_billing", JSON.stringify(billingInfo));
+        localStorage.setItem("pending_billing_same", JSON.stringify(isBillingSameAsShipping));
+        localStorage.setItem("checkout_step", "3"); 
+        setShowSaveAddressPrompt(false);
+        navigate("/login?redirect=/checkout");
+        return; 
+      } else {
+        localStorage.setItem("saved_shipping_address", JSON.stringify(shippingInfo));
+      }
+    }
+    setShowSaveAddressPrompt(false);
+    setActiveStep(3); 
   };
 
   const handlePlaceOrder = async () => {
@@ -221,50 +316,67 @@ const CheckoutPage = () => {
         return; 
       }
 
-      const orderPayload = {
-        total_amount: total,
-        status: 'Pending WhatsApp',
-        customer_phone: `+91${contactInfo.phone}`,
-        customer_email: contactInfo.email,
-        shipping_address: shippingInfo,
-        subtotal: subtotal,
-        discount: couponDiscountAmount, 
-        coupon_code: appliedCoupon ? appliedCoupon.code : null,
-        shipping_fee: shipping,
-        cod_charge: 0,
-        payment_method: paymentMethod,
-        gift_message: showGiftMessage ? giftMessage : null,
-      };
+      // Keep this frontend pre-check to fail fast without hitting the database unneccessarily
+      for (const item of checkoutItems) {
+        const { data: stockCheck, error: stockError } = await supabase
+          .from('products')
+          .select('stock_quantity')
+          .eq('id', item.id)
+          .single();
 
-      const { data: newOrder, error: orderError } = await supabase
-        .from('orders')
-        .insert([orderPayload])
-        .select('id')
-        .single();
+        if (stockError || !stockCheck || stockCheck.stock_quantity < item.qty) {
+          alert(`Oh no! Another customer just bought the last "${item.title || item.name}". It is now out of stock. Please remove it from your cart to continue.`);
+          setIsProcessing(false);
+          return; 
+        }
+      }
 
-      if (orderError) throw orderError;
+      const finalBillingAddress = isBillingSameAsShipping ? shippingInfo : billingInfo;
 
-      const orderItemsPayload = checkoutItems.map((item: any) => ({
-        order_id: newOrder.id,
-        product_id: item.id,
-        quantity: item.qty,
-        price_at_purchase: item.price,
-        size: item.size || null 
-      }));
+      // ========================================================
+      // --- BULLETPROOF ORDER CREATION VIA RPC TRANSACTION ---
+      // ========================================================
+      const { data: newOrderId, error: rpcError } = await supabase.rpc('place_order', {
+        p_total_amount: total,
+        p_status: 'Pending WhatsApp',
+        p_customer_phone: `+91${contactInfo.phone}`,
+        p_customer_email: contactInfo.email,
+        p_shipping_address: shippingInfo,
+        p_billing_address: finalBillingAddress,
+        p_subtotal: subtotal,
+        p_discount: couponDiscountAmount,
+        p_coupon_code: appliedCoupon ? appliedCoupon.code : null,
+        p_shipping_fee: shipping,
+        p_cod_charge: 0,
+        p_payment_method: paymentMethod,
+        p_gift_message: showGiftMessage ? giftMessage : null,
+        p_items: checkoutItems.map((item: any) => ({
+          product_id: item.id,
+          quantity: Number(item.qty),
+          price_at_purchase: Number(item.price),
+          size: item.size || null
+        }))
+      });
 
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItemsPayload);
-      if (itemsError) throw itemsError;
+      if (rpcError) {
+        if (rpcError.message.includes('OUT_OF_STOCK')) {
+             throw new Error("Just missed it! Another customer bought the last piece a second ago. Please review your cart.");
+        }
+        throw rpcError;
+      }
+      // ========================================================
 
       // CLEAR THE CART AND CHECKOUT DRAFT ON SUCCESS
       if (!state?.directPurchase) {
         localStorage.removeItem("sarvaa_cart"); 
       }
       localStorage.removeItem("checkout_contact");
-      localStorage.removeItem("checkout_shipping");
+      localStorage.removeItem("checkout_shipping"); 
+      localStorage.removeItem("checkout_billing");
       localStorage.removeItem("checkout_step");
-      localStorage.removeItem("checkout_coupon"); // NEW: Clear coupon memory on success
+      localStorage.removeItem("checkout_coupon");
 
-      const shortOrderId = newOrder.id.split('-')[0].toUpperCase();
+      const shortOrderId = newOrderId.split('-')[0].toUpperCase();
 
       // --- SEND AUTOMATED EMAILJS RECEIPT ---
       try {
@@ -352,16 +464,17 @@ ${giftSection}*CUSTOMER DETAILS:*
 ${shippingInfo.flat}, ${shippingInfo.street}
 ${shippingInfo.city}, ${shippingInfo.state} - ${shippingInfo.pincode}
 
+*BILLING ADDRESS:*
+${isBillingSameAsShipping ? "Same as Delivery" : `${billingInfo.flat}, ${billingInfo.street}\n${billingInfo.city}, ${billingInfo.state} - ${billingInfo.pincode}`}
+
 Please let me know how to proceed with the payment. Thank you!`;
 
       const generatedLink = `https://wa.me/${businessWhatsApp}?text=${encodeURIComponent(rawMessage)}`;
       setWhatsappLink(generatedLink);
       
       setOrderSuccess(true);
-
-      setTimeout(() => {
-        window.open(generatedLink, '_blank');
-      }, 800);
+      // REMOVED window.open setTimeout here to prevent browser blocking. 
+      // User will now click the button in the success modal.
 
     } catch (error: any) {
       console.error("Order error:", error);
@@ -379,10 +492,9 @@ Please let me know how to proceed with the payment. Thank you!`;
     <div className="min-h-screen flex flex-col bg-[#FCFCFC] font-sans relative">
       
       <Helmet>
-              <title>Checkout Page | Sarvaa Fine Jewelry</title>
-              <meta name="robots" content="noindex, nofollow" />
-            </Helmet>
-
+        <title>Checkout Page | Sarvaa Fine Jewelry</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
 
       <Navbar />
 
@@ -444,7 +556,7 @@ Please let me know how to proceed with the payment. Thank you!`;
                         </div>
                       </div>
                       <div className="mt-8 flex justify-end">
-                        <button type="submit" disabled={contactInfo.phone.length !== 10 || !contactInfo.email} className="bg-gray-900 text-white px-8 py-3 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors disabled:opacity-50 cursor-pointer">Continue to Shipping</button>
+                        <button type="submit" disabled={contactInfo.phone.length !== 10 || !contactInfo.email} className="bg-gray-900 text-white px-8 py-3 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors disabled:opacity-50 cursor-pointer">Continue to Addresses</button>
                       </div>
                     </form>
                   </motion.div>
@@ -452,7 +564,7 @@ Please let me know how to proceed with the payment. Thank you!`;
               </AnimatePresence>
             </div>
 
-            {/* STEP 2: SHIPPING ADDRESS */}
+            {/* STEP 2: SHIPPING & BILLING ADDRESSES */}
             <div className={`bg-white rounded-xl border transition-colors ${activeStep === 2 ? "border-rose-200 shadow-sm" : "border-gray-100"} ${activeStep < 2 ? "opacity-60" : ""}`}>
               <button onClick={() => activeStep > 2 && setActiveStep(2)} disabled={activeStep < 2} className={`w-full flex items-center justify-between p-6 ${activeStep >= 2 ? "cursor-pointer" : "cursor-not-allowed"}`}>
                 <h2 className="font-bold text-gray-800 text-sm uppercase tracking-wider flex items-center gap-3">
@@ -461,7 +573,7 @@ Please let me know how to proceed with the payment. Thank you!`;
                   ) : (
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${activeStep === 2 ? "bg-rose-100 text-rose-600" : "bg-gray-100 text-gray-400"}`}>2</div>
                   )}
-                  Delivery Address
+                  Addresses
                 </h2>
                 {activeStep > 2 && <span className="text-xs text-rose-600 font-medium underline">Edit</span>}
               </button>
@@ -470,7 +582,21 @@ Please let me know how to proceed with the payment. Thank you!`;
                 {activeStep === 2 && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
                     <form onSubmit={handleContinueToPayment} className="p-6 pt-0 border-t border-gray-50">
-                      <div className="space-y-6 mt-4">
+                      
+                      {/* --- SHIPPING ADDRESS SECTION --- */}
+                      <div className="flex items-center justify-between mt-4 mb-4">
+                        <h3 className="font-serif text-lg text-gray-900">Shipping Address</h3>
+                        <button 
+                          type="button" 
+                          onClick={() => handleAutoFillLocation('shipping')}
+                          className="text-[10px] md:text-xs font-bold uppercase tracking-widest text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-rose-100 transition-colors cursor-pointer border border-rose-200"
+                        >
+                          {isLocating ? <Loader2 size={14} className="animate-spin" /> : <MapPin size={14} />}
+                          Auto-fill Location
+                        </button>
+                      </div>
+
+                      <div className="space-y-6">
                         <div className="grid md:grid-cols-2 gap-6">
                           <div className="relative">
                             <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">First Name *</label>
@@ -504,8 +630,77 @@ Please let me know how to proceed with the payment. Thank you!`;
                           </div>
                         </div>
                       </div>
-                      <label className="flex items-center gap-2 cursor-pointer mt-6"><input type="checkbox" checked={showGiftMessage} onChange={() => setShowGiftMessage(!showGiftMessage)} className="text-rose-600 w-4 h-4" /><span className="text-sm font-medium">Is this a gift?</span></label>
-                      {showGiftMessage && <textarea placeholder="Gift Message" value={giftMessage} onChange={(e) => setGiftMessage(e.target.value)} className="w-full border border-gray-200 bg-gray-50 rounded-lg p-3 text-sm h-20 mt-2" />}
+
+                      <div className="h-px bg-gray-100 my-8" />
+
+                      {/* --- BILLING ADDRESS SECTION --- */}
+                      <h3 className="font-serif text-lg text-gray-900 mb-4">Billing Address</h3>
+                      
+                      <label className="flex items-center gap-3 cursor-pointer mb-6 border p-4 rounded-xl bg-gray-50/50 border-gray-200">
+                        <input 
+                          type="checkbox" 
+                          checked={isBillingSameAsShipping} 
+                          onChange={(e) => setIsBillingSameAsShipping(e.target.checked)} 
+                          className="w-4 h-4 text-rose-600 accent-rose-600 cursor-pointer" 
+                        />
+                        <span className="text-sm font-medium text-gray-800">Same as Shipping Address</span>
+                      </label>
+
+                      <AnimatePresence>
+                        {!isBillingSameAsShipping && (
+                          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="space-y-6 overflow-hidden">
+                            <div className="flex justify-end">
+                              <button 
+                                type="button" 
+                                onClick={() => handleAutoFillLocation('billing')}
+                                className="text-[10px] font-bold uppercase tracking-widest text-gray-600 bg-white px-3 py-1.5 rounded flex items-center gap-1.5 hover:bg-gray-50 transition-colors border border-gray-200 cursor-pointer"
+                              >
+                                {isLocating ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />}
+                                Auto-fill Location
+                              </button>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-6">
+                              <div className="relative">
+                                <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">First Name *</label>
+                                <input required={!isBillingSameAsShipping} type="text" value={billingInfo.firstName} onChange={(e) => setBillingInfo({...billingInfo, firstName: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                              </div>
+                              <div className="relative">
+                                <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Last Name</label>
+                                <input type="text" value={billingInfo.lastName} onChange={(e) => setBillingInfo({...billingInfo, lastName: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                              </div>
+                            </div>
+                            <div className="relative">
+                              <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Flat No, House, Building *</label>
+                              <input required={!isBillingSameAsShipping} type="text" value={billingInfo.flat} onChange={(e) => setBillingInfo({...billingInfo, flat: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                            </div>
+                            <div className="relative">
+                              <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Street, Area, Colony *</label>
+                              <input required={!isBillingSameAsShipping} type="text" value={billingInfo.street} onChange={(e) => setBillingInfo({...billingInfo, street: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                              <div className="relative">
+                                <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Pincode *</label>
+                                <input required={!isBillingSameAsShipping} type="text" maxLength={6} value={billingInfo.pincode} onChange={(e) => setBillingInfo({...billingInfo, pincode: e.target.value.replace(/\D/g, '')})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                              </div>
+                              <div className="relative">
+                                <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">City *</label>
+                                <input required={!isBillingSameAsShipping} type="text" value={billingInfo.city} onChange={(e) => setBillingInfo({...billingInfo, city: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                              </div>
+                              <div className="relative col-span-2 md:col-span-1">
+                                <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">State *</label>
+                                <input required={!isBillingSameAsShipping} type="text" value={billingInfo.state} onChange={(e) => setBillingInfo({...billingInfo, state: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
+                      <div className="h-px bg-gray-100 my-8" />
+
+                      <label className="flex items-center gap-2 cursor-pointer mt-6"><input type="checkbox" checked={showGiftMessage} onChange={() => setShowGiftMessage(!showGiftMessage)} className="text-rose-600 accent-rose-600 w-4 h-4 cursor-pointer" /><span className="text-sm font-medium">Is this a gift?</span></label>
+                      {showGiftMessage && <textarea placeholder="Gift Message" value={giftMessage} onChange={(e) => setGiftMessage(e.target.value)} className="w-full border border-gray-200 bg-gray-50 rounded-lg p-3 text-sm h-20 mt-2 outline-none focus:border-rose-300" />}
+                      
                       <div className="mt-8 flex justify-end">
                         <button type="submit" className="bg-gray-900 text-white px-8 py-3 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors cursor-pointer">Continue to Payment</button>
                       </div>
@@ -710,17 +905,48 @@ Please let me know how to proceed with the payment. Thank you!`;
         </div>
       </main>
 
+      {/* --- NEW: SAVE ADDRESS PROMPT MODAL --- */}
+      <AnimatePresence>
+        {showSaveAddressPrompt && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden p-6 text-center">
+              <div className="w-12 h-12 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MapPin size={24} className="text-rose-600" />
+              </div>
+              <h2 className="font-serif text-xl text-gray-900 mb-2">Save for next time?</h2>
+              <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+                Want us to securely save this address to your profile so you can checkout faster next time?
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => handleSaveAddressChoice(false)} 
+                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-gray-200 transition-colors cursor-pointer"
+                >
+                  No Thanks
+                </button>
+                <button 
+                  onClick={() => handleSaveAddressChoice(true)} 
+                  className="flex-1 py-3 bg-stone-900 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-stone-800 transition-colors shadow-md cursor-pointer"
+                >
+                  Yes, Save It
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* SUCCESS MODAL */}
       <AnimatePresence>
         {orderSuccess && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
             <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden text-center p-8">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckCircle2 size={32} className="text-green-600" />
               </div>
               <h2 className="font-serif text-2xl text-gray-900 mb-2">Order Initiated!</h2>
               <p className="text-sm text-gray-500 mb-6">
-                Thank you, {shippingInfo.firstName}. We have saved your order details. WhatsApp should open automatically to finalize your order.
+                Thank you, {shippingInfo.firstName}. We have saved your order details. Please click below to finalize via WhatsApp.
               </p>
               
               <div className="space-y-3">

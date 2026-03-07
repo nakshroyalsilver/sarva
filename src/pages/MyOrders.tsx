@@ -3,31 +3,32 @@ import { Link, useNavigate } from "react-router-dom";
 import { 
   Package, Clock, ArrowRight, ShoppingBag, ShieldCheck, 
   X, MapPin, CreditCard, Receipt, Printer, XCircle, 
-  RotateCcw, Star, ShoppingCart 
+  RotateCcw, Star, AlertTriangle, CheckCircle2 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { supabase } from "../../supabase";
-import { useCart } from "@/context/CartContext";
 import { Helmet } from "react-helmet-async";
-import { useQuery, useQueryClient } from "@tanstack/react-query"; // <-- ADDED TANSTACK QUERY
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 const MyOrders = () => {
   const navigate = useNavigate();
-  const { addToCart } = useCart(); 
-  const queryClient = useQueryClient(); // <-- Used to instantly update UI after canceling/returning
+  const queryClient = useQueryClient();
 
   const [user, setUser] = useState<any>(null);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isUpdating, setIsUpdating] = useState(false);
 
+  // Modals
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [itemToReview, setItemToReview] = useState<any>(null);
-  const [rating, setRating] = useState(5);
+  const [rating, setRating] = useState(0); 
   const [reviewText, setReviewText] = useState("");
+  
+  // Cancel Confirmation Modal State
+  const [cancelConfirmationOpen, setCancelConfirmationOpen] = useState(false);
 
-  // --- NEW: Accurate 5-Step Tracking Flow ---
   const trackingSteps = ["Placed", "Processing", "Shipped", "Out for Delivery", "Delivered"];
 
   const getStepIndex = (status: string) => {
@@ -37,10 +38,21 @@ const MyOrders = () => {
     if (s.includes("shipped")) return 2;
     if (s.includes("processing")) return 1;
     if (s.includes("placed") || s.includes("pending") || s.includes("new")) return 0;
-    return -1; // Fallback for Cancelled or Return Requested
+    return -1; 
   };
 
-  // Get user from local storage on mount
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('en-IN', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
   useEffect(() => {
     const storedUser = localStorage.getItem("currentUser");
     if (!storedUser) {
@@ -50,82 +62,69 @@ const MyOrders = () => {
     setUser(JSON.parse(storedUser));
   }, [navigate]);
 
-  // --- 1. TANSTACK QUERY: FETCH ALL ORDERS ---
+  // --- 1. MAIN ORDERS QUERY ---
   const { data: orders = [], isLoading: loadingOrders } = useQuery({
-    queryKey: ['myOrders', user?.email], // Caches uniquely for this user
+    queryKey: ['myOrders', user?.email], 
     queryFn: async () => {
       const cleanEmail = user?.email?.trim();
       const { data, error } = await supabase
         .from("orders")
-        .select("*")
+        .select(`
+          *,
+          order_items (
+            *,
+            products:product_id ( title, image_url, image_urls )
+          )
+        `)
         .ilike("customer_email", cleanEmail) 
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.email, // Only run the query once we have the user's email
-    staleTime: 1000 * 60 * 5, // Keep fresh for 5 minutes
+    enabled: !!user?.email, 
+    staleTime: 1000 * 60 * 5, 
   });
 
-  // --- 2. TANSTACK QUERY: FETCH ORDER DETAILS (ITEMS) ON DEMAND ---
-  const { data: orderItems = [], isFetching: loadingDetails } = useQuery({
-    queryKey: ['orderDetails', selectedOrder?.id], // Caches uniquely for this specific order
+  // --- 2. FETCH REVIEWED PRODUCTS QUERY ---
+  const { data: reviewedProducts = [] } = useQuery({
+    queryKey: ['reviewedProducts', user?.name],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("order_items")
-        .select(`
-          product_id,
-          quantity,
-          price_at_purchase,
-          size,
-          products ( name, images, image )
-        `)
-        .eq("order_id", selectedOrder.id);
-
+        .from('reviews')
+        .select('product_id')
+        .eq('user_name', user.name);
+        
       if (error) throw error;
-      return data || [];
+      return data.map(r => r.product_id); 
     },
-    enabled: !!selectedOrder?.id, // Only run when a user clicks "View Details"
-    staleTime: 1000 * 60 * 30, // Cache the items for 30 minutes since past order items don't change
+    enabled: !!user?.name,
+    staleTime: 1000 * 60 * 5,
   });
 
   const handleViewDetails = (order: any) => {
     setSelectedOrder(order);
-    // Note: TanStack query automatically handles the fetching as soon as selectedOrder is set!
   };
 
   const closeModal = () => {
     setSelectedOrder(null);
   };
 
-  const handleBuyAgain = (item: any) => {
-    if(addToCart) {
-      const productImg = item.products?.images?.[0] || item.products?.image;
-      addToCart({
-        id: item.product_id,
-        name: item.products?.name,
-        price: item.price_at_purchase,
-        image: productImg,
-        size: item.size || "Standard",
-        qty: 1
-      } as any); 
-      navigate('/cart');
-    }
+  const handleInitiateCancel = () => {
+    setCancelConfirmationOpen(true);
   };
 
-  const handleCancelOrder = async () => {
-    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+  const handleConfirmCancel = async () => {
+    if (!selectedOrder) return;
+    
     setIsUpdating(true);
     try {
       const { error } = await supabase.from('orders').update({ status: 'Cancelled' }).eq('id', selectedOrder.id);
       if (error) throw error;
       
-      // Update local modal view
       setSelectedOrder({ ...selectedOrder, status: 'Cancelled' });
-      
-      // Tell TanStack Query to silently refresh the orders list in the background
       await queryClient.invalidateQueries({ queryKey: ['myOrders', user?.email] });
+      setCancelConfirmationOpen(false);
     } catch (error) {
       console.error("Error cancelling order:", error);
       alert("Failed to cancel order.");
@@ -134,17 +133,17 @@ const MyOrders = () => {
     }
   };
 
-  const handleRequestReturn = async () => {
+  const handleRequestReturn = async (orderId: string) => {
     if (!window.confirm("Would you like to request a return or exchange for this order?")) return;
     setIsUpdating(true);
     try {
-      const { error } = await supabase.from('orders').update({ status: 'Return Requested' }).eq('id', selectedOrder.id);
+      const { error } = await supabase.from('orders').update({ status: 'Return Requested' }).eq('id', orderId);
       if (error) throw error;
       
-      // Update local modal view
-      setSelectedOrder({ ...selectedOrder, status: 'Return Requested' });
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, status: 'Return Requested' });
+      }
       
-      // Tell TanStack Query to silently refresh the orders list
       await queryClient.invalidateQueries({ queryKey: ['myOrders', user?.email] });
       alert("Return request submitted successfully. Our team will contact you shortly.");
     } catch (error) {
@@ -155,18 +154,27 @@ const MyOrders = () => {
   };
 
   const handleSubmitReview = async () => {
+    if (rating === 0) {
+      alert("Please select a star rating before submitting.");
+      return;
+    }
+
     try {
       const { error } = await supabase.from('reviews').insert({
         product_id: itemToReview.product_id,
-        user_email: user.email,
+        user_name: user.name, 
         rating: rating,
-        review_text: reviewText
+        comment: reviewText   
       });
       if (error) throw error;
       alert("Thank you for your review!");
+      
+      // Instantly update the reviewed products list
+      await queryClient.invalidateQueries({ queryKey: ['reviewedProducts', user?.name] });
+      
       setReviewModalOpen(false);
       setReviewText("");
-      setRating(5);
+      setRating(0); 
     } catch (error) {
       console.error("Error submitting review:", error);
       alert("Failed to submit review.");
@@ -200,7 +208,7 @@ const MyOrders = () => {
         <div className="flex items-center justify-between mb-10 pb-6 border-b border-gray-100">
           <div>
             <h1 className="font-serif text-3xl text-gray-900 tracking-wide mb-2">My Orders</h1>
-            <p className="text-sm text-gray-500">Track, return, or buy items again.</p>
+            <p className="text-sm text-gray-500">Track and manage your orders.</p>
           </div>
           <div className="hidden sm:flex items-center gap-2 text-green-700 bg-green-50 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-wider border border-green-100">
             <ShieldCheck size={14} /> Secured
@@ -222,13 +230,18 @@ const MyOrders = () => {
           </motion.div>
         ) : (
           <div className="space-y-6">
-            {orders.map((order: any, index: number) => (
+            {orders.map((order: any, index: number) => {
+              const firstItem = order.order_items?.[0];
+              const previewImage = firstItem?.products?.image_urls?.[0] || firstItem?.products?.image_url || "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=200&q=80";
+              const extraItemsCount = order.order_items?.length ? order.order_items.length - 1 : 0;
+
+              return (
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} key={order.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                 <div className="bg-gray-50/50 px-6 py-4 border-b border-gray-100 flex flex-wrap gap-4 items-center justify-between">
                   <div className="flex items-center gap-6">
                     <div>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Order Placed</p>
-                      <p className="text-sm font-semibold text-gray-800">{new Date(order.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                      <p className="text-sm font-semibold text-gray-800">{formatDateTime(order.created_at)}</p>
                     </div>
                     <div>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Total</p>
@@ -242,8 +255,16 @@ const MyOrders = () => {
                 </div>
 
                 <div className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+                  
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0"><Package size={24} strokeWidth={1.5} /></div>
+                    <div className="relative w-14 h-14 rounded-xl bg-gray-50 border border-gray-200 overflow-hidden shrink-0">
+                      <img src={previewImage} alt="Order Preview" className="w-full h-full object-cover" />
+                      {extraItemsCount > 0 && (
+                        <div className="absolute inset-0 bg-stone-900/40 backdrop-blur-[1px] flex items-center justify-center text-white text-[10px] font-bold">
+                          +{extraItemsCount}
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <div className="flex items-center gap-3 mb-1">
                         <h3 className="text-base font-bold text-gray-900">{order.status === "Delivered" ? "Delivered successfully" : "Tracking Status"}</h3>
@@ -252,13 +273,17 @@ const MyOrders = () => {
                       <p className="text-xs text-gray-500 flex items-center gap-1.5"><Clock size={12} />Payment Method: <span className="uppercase font-semibold text-gray-700">{order.payment_method}</span></p>
                     </div>
                   </div>
-                  <button onClick={() => handleViewDetails(order)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:border-rose-200 hover:text-rose-600 transition-colors group cursor-pointer">
-                    View Details
-                    <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                  </button>
+
+                  <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-3">
+                    <button onClick={() => handleViewDetails(order)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-bold uppercase tracking-widest hover:border-rose-200 hover:text-rose-600 transition-colors group cursor-pointer">
+                      View Details
+                      <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                    </button>
+                  </div>
+
                 </div>
               </motion.div>
-            ))}
+            )})}
           </div>
         )}
       </main>
@@ -273,14 +298,11 @@ const MyOrders = () => {
               initial={{ scale: 0.95, opacity: 0, y: 20 }} 
               animate={{ scale: 1, opacity: 1, y: 0 }} 
               exit={{ scale: 0.95, opacity: 0, y: 20 }} 
-              className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] print:max-h-none print:shadow-none print:w-full print:rounded-none print:!transform-none print:overflow-visible print:border-none print:block"
+              className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden print:max-h-none print:shadow-none print:w-full print:rounded-none print:!transform-none print:overflow-visible print:border-none print:block"
             >
               
-              {/* ========================================= */}
-              {/* WEB VIEW (HIDDEN DURING PRINT)           */}
-              {/* ========================================= */}
-              <div className="print:hidden flex flex-col h-full">
-                {/* Header */}
+              {/* WEB VIEW */}
+              <div className="print:hidden flex flex-col h-full overflow-hidden">
                 <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 shrink-0">
                   <div>
                     <h2 className="text-lg font-serif text-gray-900">Order Details</h2>
@@ -292,9 +314,7 @@ const MyOrders = () => {
                   </div>
                 </div>
 
-                {/* Body */}
-                <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-8">
-                  {/* Visual Tracking Timeline */}
+                <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-8 min-h-0">
                   {selectedOrder.status !== "Cancelled" && selectedOrder.status !== "Return Requested" && (
                     <div className="py-4 px-2">
                       <div className="flex items-center justify-between relative">
@@ -322,7 +342,6 @@ const MyOrders = () => {
                     </div>
                   )}
 
-                  {/* Status & Info Row */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-xl border border-gray-100">
                     <div>
                       <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2 flex items-center gap-1.5"><MapPin size={14}/> Shipping Address</h3>
@@ -339,54 +358,65 @@ const MyOrders = () => {
                     </div>
                   </div>
 
-                  {/* Items List */}
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4 flex items-center gap-1.5"><Receipt size={14}/> Items Ordered</h3>
-                    {loadingDetails ? (
-                      <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" /></div>
-                    ) : (
-                      <div className="space-y-4">
-                        {orderItems.map((item: any, idx: number) => {
-                          const productImg = item.products?.images?.[0] || item.products?.image || "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=200&q=80";
-                          return (
-                            <div key={idx} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
-                              <Link to={`/product/${item.product_id}`} className="flex flex-1 items-center gap-4 group">
-                                <div className="w-16 h-16 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden shrink-0">
-                                  <img src={productImg} alt="Product" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                                </div>
-                                <div>
-                                  <p className="text-sm font-semibold text-gray-900 line-clamp-1 group-hover:text-rose-600 transition-colors">{item.products?.name || "Premium Jewelry Item"}</p>
-                                  <p className="text-xs text-gray-500 mt-1">Size: {item.size || "Standard"} • Qty: {item.quantity}</p>
-                                  <p className="text-sm font-bold text-gray-900 mt-1 sm:hidden">₹{(item.price_at_purchase * item.quantity).toLocaleString()}</p>
-                                </div>
-                              </Link>
+                    <div className="space-y-4">
+                      {selectedOrder.order_items?.map((item: any, idx: number) => {
+                        const productImg = item.products?.image_urls?.[0] || item.products?.image_url || "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=200&q=80";
+                        return (
+                          <div key={idx} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
+                            <Link to={`/product/${item.product_id}`} className="flex flex-1 items-center gap-4 group">
+                              <div className="w-16 h-16 rounded-lg bg-gray-50 border border-gray-100 overflow-hidden shrink-0">
+                                <img src={productImg} alt="Product" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900 line-clamp-1 group-hover:text-rose-600 transition-colors">{item.products?.title || "Premium Jewelry Item"}</p>
+                                <p className="text-xs text-gray-500 mt-1">Size: {item.size || "Standard"} • Qty: {item.quantity}</p>
+                                <p className="text-sm font-bold text-gray-900 mt-1 sm:hidden">₹{(item.price_at_purchase * item.quantity).toLocaleString()}</p>
+                              </div>
+                            </Link>
+                            
+                            <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end sm:pl-4">
+                              <p className="text-sm font-bold text-gray-900 hidden sm:block">₹{(item.price_at_purchase * item.quantity).toLocaleString()}</p>
                               
-                              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end sm:pl-4">
-                                <p className="text-sm font-bold text-gray-900 hidden sm:block">₹{(item.price_at_purchase * item.quantity).toLocaleString()}</p>
-                                <div className="flex items-center gap-2">
-                                  <button onClick={() => handleBuyAgain(item)} className="p-2 bg-gray-50 hover:bg-rose-50 text-gray-600 hover:text-rose-600 rounded-lg transition-colors border border-gray-100 cursor-pointer" title="Buy Again"><ShoppingCart size={16} /></button>
-                                  {selectedOrder.status === "Delivered" && (
-                                    <button onClick={() => { setItemToReview(item); setReviewModalOpen(true); }} className="p-2 bg-gray-50 hover:bg-yellow-50 text-gray-600 hover:text-yellow-600 rounded-lg transition-colors border border-gray-100 cursor-pointer" title="Write a Review"><Star size={16} /></button>
-                                  )}
-                                </div>
+                              <div className="flex items-center gap-2">
+                                {/* DYNAMIC REVIEW BUTTON LOGIC */}
+                                {selectedOrder.status?.toLowerCase() === "delivered" && (
+                                  reviewedProducts.includes(item.product_id) ? (
+                                    <span className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-500 rounded-lg border border-gray-200 text-[10px] font-bold uppercase tracking-widest">
+                                      <CheckCircle2 size={12} /> Reviewed
+                                    </span>
+                                  ) : (
+                                    <button 
+                                      onClick={() => { setItemToReview(item); setReviewModalOpen(true); }} 
+                                      className="flex items-center gap-1.5 px-3 py-1.5 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-lg transition-colors border border-yellow-200 cursor-pointer text-[10px] font-bold uppercase tracking-widest shadow-sm"
+                                    >
+                                      <Star size={12} fill="currentColor" /> Write Review
+                                    </button>
+                                  )
+                                )}
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {/* Price Breakdown */}
+                  {/* PRICE BREAKDOWN & CANCEL BUTTON */}
                   <div className="border-t border-gray-100 pt-6 flex flex-col sm:flex-row justify-between items-end sm:items-start gap-6">
-                    <div className="w-full sm:w-auto">
-                      {(selectedOrder.status === "Pending Payment" || selectedOrder.status === "Placed" || selectedOrder.status === "Processing") && (
-                        <button onClick={handleCancelOrder} disabled={isUpdating} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-red-100 transition-colors cursor-pointer">
+                    <div className="w-full sm:w-auto flex flex-col gap-3">
+                      {(selectedOrder.status === "Pending Payment" || selectedOrder.status === "Placed" || selectedOrder.status === "Pending WhatsApp") && (
+                        <button 
+                          onClick={handleInitiateCancel} 
+                          disabled={isUpdating} 
+                          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-red-100 transition-colors cursor-pointer"
+                        >
                           <XCircle size={14}/> Cancel Order
                         </button>
                       )}
                       {selectedOrder.status === "Delivered" && (
-                        <button onClick={handleRequestReturn} disabled={isUpdating} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-stone-50 text-stone-700 border border-stone-200 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors cursor-pointer">
+                        <button onClick={() => handleRequestReturn(selectedOrder.id)} disabled={isUpdating} className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-stone-50 text-stone-700 border border-stone-200 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors cursor-pointer">
                           <RotateCcw size={14}/> Request Return
                         </button>
                       )}
@@ -403,13 +433,8 @@ const MyOrders = () => {
                 </div>
               </div>
 
-
-              {/* ========================================= */}
-              {/* PRINT ONLY VIEW (HIDDEN ON SCREEN)       */}
-              {/* ========================================= */}
+              {/* PRINT INVOICE VIEW */}
               <div className="hidden print:block w-full bg-white text-black font-sans p-8">
-                
-                {/* Header Section */}
                 <div className="flex justify-between items-start border-b-2 border-gray-900 pb-6 mb-8">
                   <div>
                     <h1 className="text-4xl font-serif italic mb-1 text-gray-900">Sarvaa</h1>
@@ -432,20 +457,26 @@ const MyOrders = () => {
                   </div>
                 </div>
 
-                {/* Billing Details */}
-                <div className="flex justify-between mb-10 text-sm">
-                  <div className="w-1/2 pr-8">
-                    <h3 className="font-bold text-gray-400 uppercase tracking-widest text-xs mb-2 border-b border-gray-200 pb-1">Billed & Shipped To:</h3>
+                <div className="flex justify-between mb-10 text-sm gap-8">
+                  <div className="w-1/2">
+                    <h3 className="font-bold text-gray-400 uppercase tracking-widest text-xs mb-2 border-b border-gray-200 pb-1">Billed To:</h3>
+                    <p className="font-bold text-gray-900 text-base">{selectedOrder.billing_address?.firstName || selectedOrder.shipping_address?.firstName} {selectedOrder.billing_address?.lastName || selectedOrder.shipping_address?.lastName}</p>
+                    <p className="text-gray-700 mt-1">
+                      {selectedOrder.billing_address?.flat || selectedOrder.shipping_address?.flat}, {selectedOrder.billing_address?.street || selectedOrder.shipping_address?.street}<br />
+                      {selectedOrder.billing_address?.city || selectedOrder.shipping_address?.city}, {selectedOrder.billing_address?.state || selectedOrder.shipping_address?.state} - {selectedOrder.billing_address?.pincode || selectedOrder.shipping_address?.pincode}
+                    </p>
+                  </div>
+                  <div className="w-1/2">
+                    <h3 className="font-bold text-gray-400 uppercase tracking-widest text-xs mb-2 border-b border-gray-200 pb-1">Shipped To:</h3>
                     <p className="font-bold text-gray-900 text-base">{selectedOrder.shipping_address?.firstName} {selectedOrder.shipping_address?.lastName}</p>
                     <p className="text-gray-700 mt-1">
                       {selectedOrder.shipping_address?.flat}, {selectedOrder.shipping_address?.street}<br />
                       {selectedOrder.shipping_address?.city}, {selectedOrder.shipping_address?.state} - {selectedOrder.shipping_address?.pincode}
                     </p>
-                    <p className="text-gray-700 mt-1">Ph: {selectedOrder.shipping_address?.phone || "N/A"}</p>
+                    <p className="text-gray-700 mt-1">Ph: {selectedOrder.customer_phone}</p>
                   </div>
                 </div>
 
-                {/* Professional Table */}
                 <table className="w-full text-left border-collapse mb-8 text-sm">
                   <thead>
                     <tr className="border-b-2 border-gray-900 text-gray-800">
@@ -457,10 +488,10 @@ const MyOrders = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {orderItems.map((item: any, idx: number) => (
+                    {selectedOrder.order_items?.map((item: any, idx: number) => (
                       <tr key={idx} className="border-b border-gray-200">
                         <td className="py-4 pr-4">
-                          <p className="font-bold text-gray-900">{item.products?.name || "Premium Jewelry Item"}</p>
+                          <p className="font-bold text-gray-900">{item.products?.title || "Premium Jewelry Item"}</p>
                           <p className="text-xs text-gray-500 mt-1">SKU: SRV-{item.product_id.substring(0,6).toUpperCase()}</p>
                         </td>
                         <td className="py-4 text-center text-gray-800">{item.size || "Standard"}</td>
@@ -472,7 +503,6 @@ const MyOrders = () => {
                   </tbody>
                 </table>
 
-                {/* Totals Section */}
                 <div className="flex justify-end mb-16">
                   <div className="w-72">
                     <table className="w-full text-sm">
@@ -505,15 +535,36 @@ const MyOrders = () => {
                     </table>
                   </div>
                 </div>
-
-                {/* Footer Note */}
-                <div className="border-t border-gray-300 pt-6 text-center">
-                  <p className="font-bold text-gray-800 text-sm mb-1">Thank you for your purchase!</p>
-                  <p className="text-xs text-gray-500">This is a computer-generated invoice and does not require a physical signature.</p>
-                  <p className="text-xs text-gray-500 mt-1">For returns or support, please visit www.sarvaa.com/support</p>
-                </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
+      {/* --- CANCEL CONFIRMATION WARNING MODAL --- */}
+      <AnimatePresence>
+        {cancelConfirmationOpen && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 print:hidden">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setCancelConfirmationOpen(false)} className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden p-8 text-center">
+              
+              <div className="mx-auto w-16 h-16 bg-red-50 rounded-full flex items-center justify-center text-red-500 mb-6">
+                <AlertTriangle size={32} strokeWidth={1.5} />
+              </div>
+              
+              <h3 className="font-serif text-2xl text-gray-900 mb-2">Cancel Order?</h3>
+              <p className="text-sm text-gray-500 mb-8 leading-relaxed">
+                Are you sure you want to cancel order <span className="font-bold text-gray-700">#{selectedOrder?.id?.split('-')[0].toUpperCase()}</span>? This action cannot be undone.
+              </p>
+              
+              <div className="flex flex-col gap-3">
+                <button onClick={() => setCancelConfirmationOpen(false)} className="w-full py-3.5 bg-gray-900 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors cursor-pointer">
+                  No, Keep Order
+                </button>
+                <button onClick={handleConfirmCancel} disabled={isUpdating} className="w-full py-3.5 bg-white text-red-600 border border-red-200 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-red-50 transition-colors disabled:opacity-50 cursor-pointer">
+                  {isUpdating ? "Cancelling..." : "Yes, Cancel Order"}
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
@@ -528,7 +579,7 @@ const MyOrders = () => {
               <button onClick={() => setReviewModalOpen(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-900 cursor-pointer"><X size={20}/></button>
               
               <h3 className="font-serif text-xl text-gray-900 mb-2">Rate Your Product</h3>
-              <p className="text-sm text-gray-500 mb-6 line-clamp-1">{itemToReview.products?.name}</p>
+              <p className="text-sm text-gray-500 mb-6 line-clamp-1">{itemToReview.products?.title}</p>
               
               <div className="flex justify-center gap-2 mb-6">
                 {[1,2,3,4,5].map(star => (
@@ -545,7 +596,9 @@ const MyOrders = () => {
                 className="w-full border border-gray-200 rounded-lg p-3 text-sm focus:border-rose-500 outline-none h-24 resize-none mb-6 bg-gray-50" 
               />
               
-              <button onClick={handleSubmitReview} className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors cursor-pointer">Submit Review</button>
+              <button onClick={handleSubmitReview} className="w-full py-3 bg-gray-900 text-white rounded-xl text-sm font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors cursor-pointer shadow-md">
+                Submit Review
+              </button>
             </motion.div>
           </div>
         )}

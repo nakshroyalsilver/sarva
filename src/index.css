@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -104,4 +106,23 @@ All colors MUST be HSL.
 
 .font-sans {
   font-family: 'Inter', sans-serif;
+}
+
+/* --- SARVAA LOGO STYLES --- */
+.text-logo {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 400;
+  font-size: 32px; 
+  letter-spacing: 0.15em; 
+  color: #4A4A4A; 
+  text-transform: uppercase;
+  line-height: 1;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .text-logo {
+    font-size: 24px;
+    letter-spacing: 0.12em;
+  }
 }

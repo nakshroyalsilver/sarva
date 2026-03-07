@@ -205,7 +205,7 @@ const Footer = () => {
           
           {/* Brand Column */}
           <div className="space-y-6">
-            <h3 className="font-serif text-3xl text-gray-900">Sarvaa</h3>
+            <h3 className="text-logo">Sarvaa</h3>
             <p className="text-sm text-gray-500 leading-relaxed max-w-xs">
               Designed for the modern muse. Crafting timeless silver jewelry that celebrates your unique sparkle every day.
             </p>

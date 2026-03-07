@@ -14,11 +14,11 @@ const features = [
   {
     icon: Truck,
     title: "Free Shipping",
-    description: "On All Orders Above ₹999"
+    description: "On All Orders Above ₹5000"
   },
   {
     icon: RefreshCcw,
-    title: "30-Day Returns",
+    title: "7-Day Returns",
     description: "No Questions Asked Policy"
   }
 ];

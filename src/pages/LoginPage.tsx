@@ -1,8 +1,6 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { 
-  Mail, ShieldCheck, Loader2, ArrowRight, User, Users, Lock 
-} from "lucide-react";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Mail, ShieldCheck, Loader2, User, Users, Lock, ArrowLeft } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { supabase } from "../../supabase"; 
@@ -10,35 +8,184 @@ import { Helmet } from "react-helmet-async";
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // --- 1. SUPER INITIALIZATION: Catch the clue before Supabase erases it ---
+  const [isUpdatePassword, setIsUpdatePassword] = useState(() => {
+    if (typeof window !== "undefined") {
+      const isReset = window.location.search.includes("reset=true") || window.location.hash.includes("type=recovery");
+      if (isReset) {
+        sessionStorage.setItem("isRecovering", "true");
+        return true;
+      }
+      return sessionStorage.getItem("isRecovering") === "true";
+    }
+    return false;
+  });
   
   // --- States ---
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
 
   const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    password: "",
-    gender: ""
+    name: "", email: "", password: "", gender: ""
   });
 
+  // --- 2. LISTENERS & REDIRECTS ---
+  useEffect(() => {
+    // Listen for Supabase's cross-tab broadcast 
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        sessionStorage.setItem("isRecovering", "true");
+        setIsUpdatePassword(true);
+        setIsForgotPassword(false);
+        setIsSignUp(false);
+      }
+    });
+
+    // Patience timer: Only redirect if NOT recovering
+    const timer = setTimeout(() => {
+      const isRecovering = sessionStorage.getItem("isRecovering") === "true";
+      if (!isRecovering && localStorage.getItem("currentUser")) {
+        navigate("/profile");
+      }
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      if (authListener && authListener.subscription) {
+        authListener.subscription.unsubscribe();
+      }
+    };
+  }, [navigate]);
+
   // --- Handlers ---
+  const handlePostLoginRouting = () => {
+    const pendingShipping = localStorage.getItem("pending_save_shipping");
+    if (pendingShipping) {
+      localStorage.setItem("saved_shipping_address", pendingShipping);
+      localStorage.removeItem("pending_save_shipping");
+    }
+
+    const pendingBilling = localStorage.getItem("pending_save_billing");
+    if (pendingBilling) {
+      localStorage.setItem("checkout_billing", pendingBilling);
+      localStorage.removeItem("pending_save_billing");
+    }
+
+    const pendingSameAs = localStorage.getItem("pending_billing_same");
+    if (pendingSameAs) {
+      localStorage.setItem("checkout_billing_same", pendingSameAs);
+      localStorage.removeItem("pending_billing_same");
+    }
+
+    localStorage.setItem("checkout_step", "3");
+
+    const searchParams = new URLSearchParams(location.search);
+    const redirectUrl = searchParams.get("redirect") || "/profile";
+    
+    setTimeout(() => navigate(redirectUrl), 800);
+  };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     setError("");
-    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      }
+      options: { redirectTo: window.location.origin }
     });
-
     if (error) {
       setError(error.message);
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.email) {
+      setError("Please enter your email address first.");
+      return;
+    }
+    
+    setIsLoading(true);
+    setError("");
+    setSuccessMsg("");
+
+    try {
+      // --- THE CRITICAL FIX: We attach ?reset=true to the email link ---
+      const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
+        redirectTo: `${window.location.origin}/login?reset=true`, 
+      });
+      if (error) throw error;
+      
+      setSuccessMsg("Password reset link sent! Please check your email inbox (and spam folder).");
+      
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 1000);
+      
+    } catch (err: any) {
+      console.error("Reset Error:", err);
+      if (err.message?.includes("rate limit")) {
+        setError("You've requested too many emails. Please wait a few minutes and try again.");
+      } else {
+        setError(err.message || "Failed to send reset link. Please try again.");
+      }
+      setIsLoading(false);
+    }
+  };
+
+  // --- STRICT UPDATE PASSWORD FLOW WITH CRASH-PROOF SIGNOUT ---
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+    setSuccessMsg("");
+
+    try {
+      // 1. Update the password securely
+      const { error } = await supabase.auth.updateUser({
+        password: formData.password
+      });
+
+      if (error) throw error;
+
+      // 2. Safely sign out with the Crash-Proof Timer
+      try {
+        await Promise.race([
+          supabase.auth.signOut(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000))
+        ]);
+      } catch (err) {
+        console.warn("Backend logout lock ignored.");
+      }
+      
+      // 3. Clear all local storage & session traces
+      localStorage.removeItem("currentUser");
+      localStorage.removeItem("isLoggedIn");
+      sessionStorage.removeItem("isRecovering"); // Unlocks the UI completely
+
+      // 4. Completely wipe the ?reset=true clue from the browser URL
+      if (window.history.replaceState) {
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+
+      // 5. Reset the UI back to the standard login form
+      setFormData({ name: "", email: "", password: "", gender: "" });
+      setIsUpdatePassword(false);
+      setIsForgotPassword(false);
+      setIsSignUp(false);
+      
+      // 6. Show Success Message
+      setSuccessMsg("Password updated successfully! Please log in with your new password.");
+
+    } catch (err: any) {
+      console.error("Update Password Error:", err);
+      setError(err.message || "Failed to update password. Please try again.");
+    } finally {
       setIsLoading(false);
     }
   };
@@ -51,55 +198,52 @@ const LoginPage = () => {
 
     try {
       if (isSignUp) {
-        // 1. Sign Up using Supabase Auth
         const { data: authData, error: signUpError } = await supabase.auth.signUp({
-          email: formData.email,
+          email: formData.email, 
           password: formData.password,
+          options: {
+            data: { full_name: formData.name } 
+          }
         });
-
+        
         if (signUpError) throw signUpError;
 
-        // 2. Save additional details to your custom 'customers' table
-        const userData = {
-          email: formData.email,
-          name: formData.name,
-          gender: formData.gender
-        };
+        if (authData.user && authData.user.identities && authData.user.identities.length === 0) {
+          setError("An account with this email already exists. Please log in.");
+          setIsLoading(false);
+          return;
+        }
 
-        const { error: insertError } = await supabase
-          .from('customers')
-          .insert([userData]);
+        if (authData.user && !authData.session) {
+          setSuccessMsg("Success! Please check your email to verify your account.");
+          setIsLoading(false);
+          return; 
+        }
+
+        const userData = { email: formData.email, name: formData.name, gender: formData.gender };
         
-        if (insertError) console.error("Error saving customer profile:", insertError);
+        const { error: insertError } = await supabase.from('customers').insert([userData]);
+        if (insertError) console.error("Profile creation sync warning:", insertError);
 
-        // 3. Keep local storage active for your existing app logic
         localStorage.setItem("currentUser", JSON.stringify(userData));
         localStorage.setItem("isLoggedIn", "true");
 
-        setSuccessMsg("Account created! Taking you to the store...");
-        setTimeout(() => navigate("/"), 1000);
+        setSuccessMsg("Account created! Redirecting...");
+        handlePostLoginRouting();
 
       } else {
-        // 1. Log In using Supabase Auth
         const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: formData.email,
-          password: formData.password,
+          email: formData.email, password: formData.password,
         });
-
         if (signInError) throw signInError;
 
-        // 2. Fetch their details from the customers table
-        const { data: customerData } = await supabase
-          .from('customers')
-          .select('*')
-          .eq('email', formData.email)
-          .single();
+        const { data: customerData } = await supabase.from('customers').select('*').eq('email', formData.email).single();
 
-        // 3. Keep local storage active
         localStorage.setItem("currentUser", JSON.stringify(customerData || { email: formData.email, name: formData.email.split('@')[0] }));
         localStorage.setItem("isLoggedIn", "true");
-
-        navigate("/");
+        
+        setSuccessMsg("Welcome back! Redirecting...");
+        handlePostLoginRouting();
       }
     } catch (err: any) {
       console.error("Auth Error:", err);
@@ -112,154 +256,162 @@ const LoginPage = () => {
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans text-gray-900">
        <Helmet>
-         <title>{isSignUp ? "Sign Up" : "Login"} | Sarvaa Fine Jewelry</title>
-         <meta name="robots" content="noindex, nofollow" />
-       </Helmet>
-
+        <title>{isUpdatePassword ? "Create New Password" : isForgotPassword ? "Reset Password" : isSignUp ? "Sign Up" : "Login"} | Sarvaa Fine Jewelry</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       <Navbar />
 
       <main className="flex-grow flex items-center justify-center py-12 px-4 bg-[#FCFCFC]">
         <div className="w-full max-w-sm">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 relative overflow-hidden">
-            
-            {/* Header section */}
             <div className="bg-gradient-to-b from-rose-50 to-white pt-12 pb-6 text-center px-6">
-              <h1 className="font-serif text-3xl text-gray-900 mb-2 italic">Sarvaa</h1>
-              <p className="text-[10px] text-gray-400 uppercase tracking-[0.2em] font-bold">
-                {isSignUp ? "Create your account" : "Welcome to Luxury"}
+              <h1 className="text-logo mb-2">Sarvaa</h1>
+              <p className="text-[10px] text-gray-400 uppercase tracking-[0.2em] font-bold mt-2">
+                {isUpdatePassword ? "Secure your account" : isForgotPassword ? "Reset your password" : isSignUp ? "Create your account" : "Welcome to Luxury"}
               </p>
             </div>
 
             <div className="p-8 pt-2">
-              
-              {/* Messages */}
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg text-center font-medium">
-                  {error}
-                </div>
+              {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg text-center font-medium">{error}</div>}
+              {successMsg && <div className="mb-4 p-3 bg-green-50 text-green-700 text-xs rounded-lg text-center font-medium">{successMsg}</div>}
+
+              {/* Hide Google Login if we are in Reset OR Update mode */}
+              {!isForgotPassword && !isUpdatePassword && (
+                <>
+                  <button onClick={handleGoogleLogin} disabled={isLoading} type="button" className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50">
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
+                    <span className="text-sm">Continue with Google</span>
+                  </button>
+
+                  <div className="flex items-center my-6">
+                    <div className="flex-1 border-t border-gray-100"></div>
+                    <span className="px-3 text-[10px] uppercase font-bold text-gray-300 tracking-widest">or</span>
+                    <div className="flex-1 border-t border-gray-100"></div>
+                  </div>
+                </>
               )}
-              {successMsg && (
-                <div className="mb-4 p-3 bg-green-50 text-green-700 text-xs rounded-lg text-center font-medium">
-                  {successMsg}
-                </div>
-              )}
 
-              {/* Google Button */}
-              <button 
-                onClick={handleGoogleLogin} 
-                disabled={isLoading}
-                type="button"
-                className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
-                <span className="text-sm">Continue with Google</span>
-              </button>
-
-              {/* Divider */}
-              <div className="flex items-center my-6">
-                <div className="flex-1 border-t border-gray-100"></div>
-                <span className="px-3 text-[10px] uppercase font-bold text-gray-300 tracking-widest">or</span>
-                <div className="flex-1 border-t border-gray-100"></div>
-              </div>
-
-              {/* Email / Password Form */}
-              <form onSubmit={handleEmailAuth} className="space-y-4">
-                
-                {isSignUp && (
+              {/* DYNAMIC FORM RENDERING */}
+              {isUpdatePassword ? (
+                /* --- UPDATE PASSWORD FORM --- */
+                <form onSubmit={handleUpdatePassword} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Full Name</label>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Enter New Password</label>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                      <input 
-                        required 
-                        type="text" 
-                        placeholder="Full Name" 
-                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all"
-                        value={formData.name}
-                        onChange={(e) => setFormData({...formData, name: e.target.value})}
-                      />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <input required type="password" placeholder="••••••••" minLength={6} className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
                     </div>
                   </div>
-                )}
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                    <input 
-                      required 
-                      type="email" 
-                      placeholder="email@example.com" 
-                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all"
-                      value={formData.email}
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    />
+                  <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
+                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Save Password & Login"}
+                  </button>
+
+                  {/* CANCEL BUTTON: Lets the user escape the locked UI */}
+                  <div className="mt-4 text-center">
+                    <button type="button" onClick={() => { 
+                      setIsUpdatePassword(false); 
+                      sessionStorage.removeItem("isRecovering");
+                      if (window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
+                      setError(""); 
+                      setSuccessMsg(""); 
+                    }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
+                      <ArrowLeft size={14} /> Cancel Reset
+                    </button>
                   </div>
-                </div>
+                </form>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                    <input 
-                      required 
-                      type="password" 
-                      placeholder="••••••••" 
-                      minLength={6}
-                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all"
-                      value={formData.password}
-                      onChange={(e) => setFormData({...formData, password: e.target.value})}
-                    />
-                  </div>
-                </div>
-
-                {isSignUp && (
+              ) : isForgotPassword ? (
+                /* --- FORGOT PASSWORD FORM --- */
+                <form onSubmit={handleResetPassword} className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Gender</label>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Enter your Email</label>
                     <div className="relative">
-                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                      <select 
-                        required 
-                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all appearance-none bg-white font-medium text-gray-700 cursor-pointer"
-                        value={formData.gender}
-                        onChange={(e) => setFormData({...formData, gender: e.target.value})}
-                      >
-                        <option value="">Select Gender</option>
-                        <option value="female">Female</option>
-                        <option value="male">Male</option>
-                        <option value="other">Other</option>
-                      </select>
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <input required type="email" placeholder="email@example.com" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
                     </div>
                   </div>
-                )}
 
-                <button 
-                  type="submit" 
-                  disabled={isLoading} 
-                  className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isLoading ? <Loader2 size={16} className="animate-spin" /> : (isSignUp ? "Create Account" : "Sign In")}
-                </button>
-              </form>
+                  <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
+                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Send Reset Link"}
+                  </button>
 
-              {/* Toggle Login/Signup */}
-              <div className="mt-6 text-center">
-                <button 
-                  onClick={() => {
-                    setIsSignUp(!isSignUp);
-                    setError("");
-                    setFormData({ name: "", email: "", password: "", gender: "" });
-                  }}
-                  className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors cursor-pointer"
-                >
-                  {isSignUp ? "Already have an account? Log In" : "Don't have an account? Sign Up"}
-                </button>
-              </div>
+                  <div className="mt-4 text-center">
+                    <button type="button" onClick={() => { setIsForgotPassword(false); setError(""); setSuccessMsg(""); }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
+                      <ArrowLeft size={14} /> Back to Login
+                    </button>
+                  </div>
+                </form>
 
-              {/* SSL Badge */}
+              ) : (
+                /* --- NORMAL LOGIN / SIGNUP FORM --- */
+                <form onSubmit={handleEmailAuth} className="space-y-4">
+                  {isSignUp && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Full Name</label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input required type="text" placeholder="Full Name" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Email Address</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <input required type="email" placeholder="email@example.com" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between pl-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Password</label>
+                      {!isSignUp && (
+                        <button 
+                          type="button" 
+                          onClick={() => { setIsForgotPassword(true); setError(""); setSuccessMsg(""); }} 
+                          className="text-[10px] font-bold text-rose-600 hover:text-rose-700 transition-colors cursor-pointer"
+                        >
+                          Forgot?
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                      <input required type="password" placeholder="••••••••" minLength={6} className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
+                    </div>
+                  </div>
+
+                  {isSignUp && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Gender</label>
+                      <div className="relative">
+                        <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <select required className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all appearance-none bg-white font-medium text-gray-700 cursor-pointer" value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
+                          <option value="">Select Gender</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
+                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : (isSignUp ? "Create Account" : "Sign In")}
+                  </button>
+                </form>
+              )}
+
+              {/* Hide the toggle buttons if we are in Forgot Password or Update Password mode */}
+              {!isForgotPassword && !isUpdatePassword && (
+                <div className="mt-6 text-center">
+                  <button onClick={() => { setIsSignUp(!isSignUp); setError(""); setFormData({ name: "", email: "", password: "", gender: "" }); }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors cursor-pointer">
+                    {isSignUp ? "Already have an account? Log In" : "Don't have an account? Sign Up"}
+                  </button>
+                </div>
+              )}
+
               <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-center gap-2 text-green-700 bg-green-50 py-2 rounded-xl mx-[-10px] mb-[-10px]">
-                <ShieldCheck size={14} />
-                <span className="text-[10px] font-bold uppercase tracking-widest">Secure SSL Login</span>
+                <ShieldCheck size={14} /><span className="text-[10px] font-bold uppercase tracking-widest">Secure SSL Encryption</span>
               </div>
             </div>
           </div>

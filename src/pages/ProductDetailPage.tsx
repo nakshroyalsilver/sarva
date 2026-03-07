@@ -9,17 +9,13 @@ import { supabase } from "../../supabase";
 import ProductReviews from "@/components/home/ProductReviews";
 import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
+import AddToCartPopup from "../components/layout/AddToCartPopup"
 
 // --- CUSTOM QUILL HTML STYLING ---
-// This safely restores margins, lists, and headings inside Quill content
-// It ensures your admin editor formatting perfectly matches the public view
 const quillStyles = `
   text-sm text-gray-600 leading-relaxed
   [&_p]:mb-4 last:[&_p]:mb-0
-  
-  /* FIX: Forces bold text to be truly bold and dark black, overriding pasted styles */
   [&_strong]:!font-bold [&_strong]:!text-black [&_b]:!font-bold [&_b]:!text-black
-  
   [&_em]:italic [&_i]:italic
   [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4
   [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-4
@@ -55,6 +51,8 @@ const ProductDetailPage = () => {
   const [isZooming, setIsZooming] = useState(false);
   const [zoomStyle, setZoomStyle] = useState({});
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [isPopupOpen, setIsPopupOpen] = useState(false);
+  const [justAddedItem, setJustAddedItem] = useState<any>(null);
 
   const { data: pageData, isLoading } = useQuery({
     queryKey: ['product', id],
@@ -129,6 +127,7 @@ const ProductDetailPage = () => {
     setQuantity(1);
     setSelectedSize(null);
     setSizeError(false);
+    setIsZooming(false); // Reset zoom on load
   }, [id]);
 
   const isWishlisted = product ? wishlistItems.some((item) => item.id === product.id) : false;
@@ -184,8 +183,17 @@ const ProductDetailPage = () => {
     for (let i = 0; i < quantity; i++) {
       addToCart(product, selectedSize || "Standard");
     }
+    
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 2000);
+
+    setJustAddedItem({
+      title: product.title,
+      price: product.price,
+      image: product.image_urls?.[0] || product.image_url || '', 
+      size: selectedSize || "Standard"
+    });
+    setIsPopupOpen(true);
   };
 
   const handleBuyNow = () => {
@@ -237,8 +245,26 @@ const ProductDetailPage = () => {
     }
   };
 
+  // --- NEW: TOGGLE ZOOM ON CLICK ---
+  const toggleZoom = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (activeImage === -1) return; // Prevent zooming on videos
+    if (!isZooming) {
+      const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+      const x = ((e.clientX - left) / width) * 100;
+      const y = ((e.clientY - top) / height) * 100;
+      setZoomStyle({
+        transformOrigin: `${x}% ${y}%`,
+        transform: 'scale(2.5)'
+      });
+      setIsZooming(true);
+    } else {
+      setIsZooming(false);
+    }
+  };
+
+  // --- MODIFIED: PAN ONLY WHEN ZOOMING IS ACTIVE ---
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!imageContainerRef.current || activeImage === -1) return;
+    if (!imageContainerRef.current || activeImage === -1 || !isZooming) return;
     const { left, top, width, height } = imageContainerRef.current.getBoundingClientRect();
     const x = ((e.clientX - left) / width) * 100;
     const y = ((e.clientY - top) / height) * 100;
@@ -310,10 +336,10 @@ const ProductDetailPage = () => {
             <div className="flex flex-col gap-3"> 
               <div 
                 ref={imageContainerRef}
-                onMouseEnter={() => activeImage !== -1 && setIsZooming(true)}
+                onClick={toggleZoom}
                 onMouseLeave={() => setIsZooming(false)}
                 onMouseMove={handleMouseMove}
-                className={`flex-1 relative aspect-square bg-gray-50 rounded-xl overflow-hidden group border border-gray-100 ${activeImage !== -1 ? 'cursor-crosshair' : ''}`}
+                className={`flex-1 relative aspect-square bg-gray-50 rounded-xl overflow-hidden group border border-gray-100 ${activeImage !== -1 ? (isZooming ? 'cursor-zoom-out' : 'cursor-zoom-in') : ''}`}
               >
                  {activeImage === -1 && product.video_url ? (
                    <video src={product.video_url} controls autoPlay muted loop className="w-full h-full object-cover"/>
@@ -332,11 +358,6 @@ const ProductDetailPage = () => {
                  >
                    <Heart size={18} className={isWishlisted ? "fill-rose-600 text-rose-600" : ""} />
                  </button>
-                 
-                 <div className={`absolute bottom-4 left-4 flex items-center gap-1 bg-white/90 backdrop-blur px-2 py-1 rounded text-xs font-bold text-gray-800 shadow-sm transition-opacity ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
-                    <Star size={10} className="fill-amber-400 text-amber-400" />
-                    <span>{product.rating} | {product.reviews}</span>
-                 </div>
               </div>
 
               <div className="flex gap-2 overflow-x-auto lg:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] pb-2 lg:pb-0">
@@ -628,6 +649,13 @@ const ProductDetailPage = () => {
         productId={product.id} 
         categoryName={product.categories?.name || ""} 
       />
+      {/* Put this near the bottom of your file */}
+      <AddToCartPopup 
+        isOpen={isPopupOpen} 
+        onClose={() => setIsPopupOpen(false)} 
+        product={justAddedItem} 
+        cartCount={cartItems.length} 
+      />
 
       <Footer />
     </div>
@@ -651,6 +679,7 @@ const AccordionItem = ({ title, children }: { title: string, children: React.Rea
           </motion.div>
         )}
       </AnimatePresence>
+      
     </div>
   );
 };

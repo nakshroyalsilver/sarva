@@ -1,8 +1,8 @@
 import { useRef } from "react";
-import { Star, ChevronLeft, ChevronRight } from "lucide-react";
-import { supabase } from "../../../supabase"; // Adjust path to your supabase config
+import { Star, ChevronLeft, ChevronRight, User } from "lucide-react"; // <-- Added User icon
+import { supabase } from "../../../supabase"; 
 import { useQuery } from "@tanstack/react-query";
-import { allMockReviews } from "@/data/mockReviews"; // Adjust path to your mock file
+import { allMockReviews } from "@/data/mockReviews"; 
 
 const Testimonials = () => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -26,25 +26,22 @@ const Testimonials = () => {
 
       if (error) console.error("Failed to fetch real reviews:", error);
 
-      // 2. Format Real Reviews
+      // 2. Format Real Reviews (Removed the cartoon avatar generator)
       const realReviews = (data || []).map((r: any) => ({
         id: r.id,
         name: r.user_name,
         rating: r.rating,
         review: r.comment,
-        product: r.products?.title || "Signature Piece", 
-        image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(r.user_name)}`
+        product: r.products?.title || "Signature Piece"
       }));
 
-      // 3. Format Mock Reviews to match the exact same UI structure
+      // 3. Format Mock Reviews (Removed the cartoon avatar generator)
       const formattedMocks = allMockReviews.map((m) => ({
         id: m.id,
         name: m.author,
         rating: m.rating,
         review: m.content,
-        // Using a generic nice title for the landing page mocks
-        product: "Signature Collection", 
-        image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(m.author)}`
+        product: "Signature Collection"
       }));
 
       // 4. Merge: Put real customer reviews first, followed by all the mock reviews
@@ -114,11 +111,13 @@ const Testimonials = () => {
                   className="min-w-[280px] md:min-w-[320px] snap-center bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md hover:border-gray-200 transition-all flex flex-col"
                 >
                   <div className="flex items-center gap-4 mb-4">
-                    <img
-                      src={review.image}
-                      alt={review.name}
-                      className="w-12 h-12 rounded-full bg-gray-50 border border-gray-100"
-                    />
+                    
+                    {/* --- REPLACED CARTOON IMAGE WITH PREMIUM ICON --- */}
+                    <div className="w-12 h-12 rounded-full bg-stone-50 text-stone-400 flex items-center justify-center border border-stone-100 shrink-0">
+                      <User size={20} strokeWidth={1.5} />
+                    </div>
+                    {/* ------------------------------------------------ */}
+
                     <div>
                       <h4 className="text-sm font-bold text-gray-900">{review.name}</h4>
                       <div className="flex gap-0.5 mt-0.5">

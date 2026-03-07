@@ -3,7 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { 
   Search, Heart, ShoppingBag, User, Menu, X, 
   ChevronRight, ChevronDown, MapPin, 
-  TrendingUp, Sparkles, FolderSearch, Package
+  TrendingUp, Sparkles, FolderSearch, Package,
+  Edit2, Trash2, Check 
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCart } from "@/context/CartContext"; 
@@ -33,6 +34,12 @@ const Navbar = () => {
   const [pincode, setPincode] = useState(localStorage.getItem("user_pincode") || "Select Location");
   const [tempPincode, setTempPincode] = useState("");
 
+  // --- NEW: PROFILE MODAL STATES ---
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [savedAddress, setSavedAddress] = useState<any>(null);
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [addressForm, setAddressForm] = useState({ firstName: "", lastName: "", flat: "", street: "", city: "", state: "", pincode: "" });
+
   const [navCategories, setNavCategories] = useState<any[]>([...staticLeftCategories, ...staticRightCategories]);
   const [categoryLinks, setCategoryLinks] = useState<{name: string, path: string}[]>([]);
 
@@ -42,12 +49,12 @@ const Navbar = () => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // --- DYNAMIC SEARCH STATES ---
+  // Dynamic Search States
   const [popularSearches, setPopularSearches] = useState<string[]>([]);
   const [trendingProducts, setTrendingProducts] = useState<any[]>([]);
   const [allAvailableSuggestions, setAllAvailableSuggestions] = useState<string[]>([]); 
 
-  // --- DYNAMIC ANNOUNCEMENT BAR LOGIC ---
+  // Announcement Bar Logic
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [announcementIndex, setAnnouncementIndex] = useState(0);
 
@@ -67,7 +74,6 @@ const Navbar = () => {
     return () => clearInterval(interval);
   }, [announcements.length]);
 
-  // --- FETCH MASTER DATA FOR SEARCH ---
   useEffect(() => {
     async function fetchNavData() {
       const { data: catData } = await supabase.from('categories').select('*').eq('is_visible', true).order('created_at', { ascending: true });
@@ -125,38 +131,49 @@ const Navbar = () => {
     fetchNavData();
   }, []);
 
-  // --- FIXED: Live User Auth Listener ---
-  useEffect(() => {
-    // 1. Initial quick check
-    const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) setUser(JSON.parse(storedUser));
+ useEffect(() => {
+  const storedUser = localStorage.getItem("currentUser");
+  if (storedUser) setUser(JSON.parse(storedUser));
 
-    // 2. Listen to live Supabase auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
-        const userData = { name: userName, email: session.user.email };
-        
-        setUser(userData);
-        localStorage.setItem("currentUser", JSON.stringify(userData));
-        localStorage.setItem("isLoggedIn", "true");
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        localStorage.removeItem("currentUser");
-        localStorage.removeItem("isLoggedIn");
-      }
-    });
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    // Check if we are in a recovery flow RIGHT NOW
+    const isRecovering = window.location.hash.includes("type=recovery") || 
+                         window.location.search.includes("reset=true");
 
-    return () => subscription.unsubscribe();
-  }, []);
+    if (event === 'SIGNED_IN' && session?.user) {
+      // IF RECOVERING: Do NOT save to localStorage. Just stay quiet.
+      if (isRecovering) return; 
 
-  // --- FIXED: Handle Logout properly via Supabase ---
+      const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
+      const userData = { name: userName, email: session.user.email };
+      setUser(userData);
+      localStorage.setItem("currentUser", JSON.stringify(userData));
+      localStorage.setItem("isLoggedIn", "true");
+    } else if (event === 'SIGNED_OUT') {
+      setUser(null);
+      localStorage.removeItem("currentUser");
+      localStorage.removeItem("isLoggedIn");
+    }
+  });
+  return () => subscription.unsubscribe();
+}, []);
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    // 1. Instantly clear the frontend so the UI feels blazing fast
     localStorage.removeItem("currentUser");
     localStorage.removeItem("isLoggedIn");
     setUser(null);
+    setIsProfileModalOpen(false);
     navigate("/"); 
+
+    // 2. Tell Supabase to sign out in the background (with a 2-second crash-proof timeout)
+    try {
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 2000))
+      ]);
+    } catch (err) {
+      console.warn("Supabase backend logout skipped due to lock, but local session cleared.");
+    }
   };
 
   useEffect(() => {
@@ -221,6 +238,31 @@ const Navbar = () => {
     setSearchQuery(""); 
   };
 
+  // --- NEW: PROFILE MODAL HANDLERS ---
+  const openProfileModal = () => {
+    const address = localStorage.getItem("saved_shipping_address");
+    if (address) {
+      const parsed = JSON.parse(address);
+      setSavedAddress(parsed);
+      setAddressForm(parsed);
+    }
+    setIsProfileModalOpen(true);
+    setMobileMenuOpen(false); 
+  };
+
+  const handleSaveAddress = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem("saved_shipping_address", JSON.stringify(addressForm));
+    setSavedAddress(addressForm);
+    setIsEditingAddress(false);
+  };
+
+  const handleDeleteAddress = () => {
+    localStorage.removeItem("saved_shipping_address");
+    setSavedAddress(null);
+    setAddressForm({ firstName: "", lastName: "", flat: "", street: "", city: "", state: "", pincode: "" });
+  };
+
   const filteredSearches = searchQuery 
     ? allAvailableSuggestions.filter(s => s.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 5)
     : popularSearches.slice(0, 4); 
@@ -263,7 +305,7 @@ const Navbar = () => {
               {mobileMenuOpen ? <X size={24} strokeWidth={1.5} /> : <Menu size={24} strokeWidth={1.5} />}
             </button>
             <Link to="/" className="absolute left-1/2 transform -translate-x-1/2">
-              <h1 className="text-2xl font-serif tracking-widest text-gray-900">Sarvaa</h1>
+              <h1 className="text-logo">Sarvaa</h1>
             </Link>
             <div className="flex items-center gap-3">
               <button 
@@ -331,7 +373,7 @@ const Navbar = () => {
           <div className="hidden lg:flex items-center justify-between h-20 gap-6">
             <div className="w-56 flex-shrink-0">
               <Link to="/" className="inline-block">
-                <h1 className="text-3xl font-serif tracking-[0.3em] text-gray-900 font-medium hover:opacity-80 transition-opacity">
+                <h1 className="text-logo hover:opacity-80 transition-opacity">
                   Sarvaa
                 </h1>
               </Link>
@@ -485,11 +527,19 @@ const Navbar = () => {
                     <div className="w-8 h-8 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center text-sm font-bold uppercase border border-rose-200 transition-colors group-hover:bg-rose-600 group-hover:text-white">
                       {user.name.charAt(0)}
                     </div>
+                    {/* DROPDOWN MENU */}
                     <div className="absolute top-full right-0 w-48 bg-white border border-gray-100 shadow-xl rounded-lg py-2 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 translate-y-2 group-hover:translate-y-0">
                       <div className="px-4 py-3 border-b border-gray-50 mb-1">
                         <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Welcome</p>
                         <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
                       </div>
+                      
+                      {/* --- NEW: OPENS MODAL DIRECTLY FROM DROPDOWN --- */}
+                      <button onClick={openProfileModal} className="w-full text-left block px-4 py-2 text-xs font-medium text-gray-600 hover:bg-rose-50 hover:text-rose-600 cursor-pointer">
+                        Profile & Address
+                      </button>
+                      {/* ------------------------------------------------ */}
+
                       <Link to="/my-orders" className="block px-4 py-2 text-xs font-medium text-gray-600 hover:bg-rose-50 hover:text-rose-600">My Orders</Link>
                       <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border-t border-gray-50 mt-1 pt-3 cursor-pointer">Logout</button>
                     </div>
@@ -512,7 +562,6 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* --- RESTORED MEGA MENU --- */}
         <nav className="hidden lg:block border-t border-gray-200 relative bg-white z-10" onMouseLeave={() => setActiveCategory(null)}>
           <div className="container mx-auto px-6 flex items-center justify-center h-12">
             <ul className="flex items-center gap-8">
@@ -578,6 +627,14 @@ const Navbar = () => {
                     </div>
                     <button onClick={handleLogout} className="text-xs font-bold text-rose-600 px-3 py-1.5 bg-rose-50 rounded-md hover:bg-rose-100 cursor-pointer">Logout</button>
                   </div>
+                  
+                  {/* --- NEW: MOBILE OPENS MODAL DIRECTLY --- */}
+                  <button onClick={openProfileModal} className="w-full px-6 py-3.5 bg-white border-b border-gray-100 text-sm font-bold text-gray-700 hover:text-rose-600 flex items-center justify-between cursor-pointer">
+                    <span className="flex items-center gap-2"><User size={16} className="text-rose-500"/> Profile & Address</span>
+                    <ChevronRight size={16} className="text-gray-400" />
+                  </button>
+                  {/* ----------------------------------------- */}
+
                   <Link to="/my-orders" onClick={() => setMobileMenuOpen(false)} className="block px-6 py-3.5 bg-gray-50 border-b border-gray-100 text-sm font-bold text-gray-700 hover:text-rose-600 flex items-center justify-between">
                     <span className="flex items-center gap-2"><Package size={16} className="text-rose-500"/> Track My Orders</span>
                     <ChevronRight size={16} className="text-gray-400" />
@@ -617,7 +674,89 @@ const Navbar = () => {
         </AnimatePresence>
       </header>
 
-      {/* MODAL */}
+      {/* --- NEW: PROFILE & ADDRESS MODAL --- */}
+      <AnimatePresence>
+        {isProfileModalOpen && user && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 font-sans">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsProfileModalOpen(false)} className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm cursor-pointer" />
+            <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="relative bg-[#FCFCFC] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
+              
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10 shadow-sm">
+                 <h3 className="font-serif text-xl text-gray-900">My Profile</h3>
+                 <button onClick={() => setIsProfileModalOpen(false)} className="p-1.5 bg-gray-50 hover:bg-gray-100 text-gray-400 hover:text-gray-900 rounded-full transition-colors cursor-pointer"><X size={18}/></button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 space-y-6">
+                 {/* User Info Card */}
+                 <div className="bg-white border border-gray-100 p-5 rounded-xl shadow-sm flex items-center gap-4">
+                   <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center text-xl font-bold uppercase border border-rose-100 shrink-0">
+                     {user.name.charAt(0)}
+                   </div>
+                   <div>
+                     <p className="text-[10px] uppercase text-gray-400 font-bold tracking-widest mb-1">Account Details</p>
+                     <p className="font-bold text-gray-900 text-base">{user.name}</p>
+                     <p className="text-sm text-gray-500">{user.email}</p>
+                   </div>
+                 </div>
+
+                 {/* Address Section */}
+                 <div className="bg-white border border-gray-100 p-5 rounded-xl shadow-sm">
+                    <div className="flex justify-between items-center mb-4">
+                       <p className="text-[10px] uppercase text-gray-400 font-bold tracking-widest flex items-center gap-1.5"><MapPin size={12}/> Saved Address</p>
+                       {!isEditingAddress && savedAddress && (
+                         <button onClick={()=>setIsEditingAddress(true)} className="text-[10px] text-rose-600 font-bold uppercase tracking-widest hover:text-rose-700 flex items-center gap-1 cursor-pointer">
+                           <Edit2 size={12}/> Edit
+                         </button>
+                       )}
+                    </div>
+
+                    { !isEditingAddress ? (
+                       savedAddress ? (
+                         <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg relative group">
+                           <button onClick={handleDeleteAddress} className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors cursor-pointer" title="Remove Address">
+                             <Trash2 size={16}/>
+                           </button>
+                           <p className="font-bold text-gray-900 text-sm mb-1">{savedAddress.firstName} {savedAddress.lastName}</p>
+                           <p className="text-sm text-gray-600 leading-relaxed">
+                             {savedAddress.flat}, {savedAddress.street}<br/>
+                             {savedAddress.city}, {savedAddress.state} - {savedAddress.pincode}
+                           </p>
+                         </div>
+                       ) : (
+                         <div className="border border-dashed border-gray-300 p-6 rounded-lg text-center bg-gray-50/50">
+                           <p className="text-sm text-gray-500 mb-4 font-medium">No delivery address saved yet.</p>
+                           <button onClick={()=>setIsEditingAddress(true)} className="bg-gray-900 text-white px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-colors shadow-sm cursor-pointer">Add New Address</button>
+                         </div>
+                       )
+                    ) : (
+                       <form onSubmit={handleSaveAddress} className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <input required type="text" placeholder="First Name" value={addressForm.firstName} onChange={(e) => setAddressForm({...addressForm, firstName: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                            <input type="text" placeholder="Last Name" value={addressForm.lastName} onChange={(e) => setAddressForm({...addressForm, lastName: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                          </div>
+                          <input required type="text" placeholder="Flat, House no., Building" value={addressForm.flat} onChange={(e) => setAddressForm({...addressForm, flat: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                          <input required type="text" placeholder="Area, Street, Sector" value={addressForm.street} onChange={(e) => setAddressForm({...addressForm, street: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                          <div className="grid grid-cols-3 gap-3">
+                            <input required type="text" maxLength={6} placeholder="Pincode" value={addressForm.pincode} onChange={(e) => setAddressForm({...addressForm, pincode: e.target.value.replace(/\D/g, '')})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                            <input required type="text" placeholder="City" value={addressForm.city} onChange={(e) => setAddressForm({...addressForm, city: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                            <input required type="text" placeholder="State" value={addressForm.state} onChange={(e) => setAddressForm({...addressForm, state: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <button type="button" onClick={() => setIsEditingAddress(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-200 cursor-pointer transition-colors">Cancel</button>
+                            <button type="submit" className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-colors"><Check size={14}/> Save</button>
+                          </div>
+                       </form>
+                    )}
+                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* LOCATION PINCODE MODAL (Unchanged) */}
       <AnimatePresence>
         {isLocationModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">

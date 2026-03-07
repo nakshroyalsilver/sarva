@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Filter, ChevronDown, SlidersHorizontal, ArrowUpDown, X, Frown } from "lucide-react";
+import { Filter, ChevronDown, SlidersHorizontal, ArrowUpDown, X, Frown, Check } from "lucide-react";
 import Navbar from "@/components/layout/Navbar"; 
 import Footer from "@/components/layout/Footer"; 
 import ProductCard from "@/components/ProductCard";
 import { supabase } from "../../supabase";
 import { Helmet } from "react-helmet-async"; 
-import { useQuery } from "@tanstack/react-query"; // <-- ADDED TANSTACK QUERY
+import { useQuery } from "@tanstack/react-query"; 
 
 const PRICE_RANGES = ["Under ₹1000", "₹1000 - ₹2500", "₹2500 - ₹5000", "Above ₹5000"];
 const MATERIAL_OPTIONS = ["925 Sterling Silver", "Rose Gold Plated", "Oxidized Silver", "Gold Plated"];
@@ -17,19 +17,20 @@ const CategoryPage = () => {
   
   // UI State
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isMobileSortOpen, setIsMobileSortOpen] = useState(false); // <-- ADDED SORT SHEET STATE
   
   // Filter & Sort State
   const [sortOption, setSortOption] = useState("recommended");
   const [selectedPrices, setSelectedPrices] = useState<string[]>([]);
+  const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]); 
 
   // 1. TANSTACK QUERY: Fetch Catalog Data & Cache it
   const { data, isLoading } = useQuery({
-    queryKey: ['catalog', slug], // Caches uniquely based on the current category URL
+    queryKey: ['catalog', slug], 
     queryFn: async () => {
       let title = 'All Collections';
       let query = supabase.from('products').select('*, categories(name, slug)').order('created_at', { ascending: false });
 
-      // Determine category logic based on the slug
       if (slug === 'new') {
         title = 'New Arrivals';
         query = query.eq('is_new_arrival', true);
@@ -49,28 +50,27 @@ const CategoryPage = () => {
         name: p.title, 
         image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
         price: p.price || 0, 
-        category: p.categories?.name || 'Uncategorized'
+        category: p.categories?.name || 'Uncategorized',
+        stock_quantity: Number(p.stock_quantity || 0) // Explicitly parse stock for sorting
       })) : [];
 
       return { categoryName: title, products: formattedProducts };
     },
-    staleTime: 1000 * 60 * 5, // Keep this category cached for 5 minutes without refetching
+    staleTime: 1000 * 60 * 5, 
   });
 
-  // Extract variables safely from the query data
   const rawProducts = data?.products || [];
-  
-  // Fallback names so the UI doesn't jump blank while loading
   const categoryName = data?.categoryName || (slug === 'new' ? 'New Arrivals' : slug === 'all' ? 'All Collections' : '');
 
   // Reset filters and scroll to top when the category URL changes
   useEffect(() => {
     setSelectedPrices([]);
+    setSelectedMaterials([]);
     setSortOption("recommended");
     window.scrollTo(0, 0);
   }, [slug]);
 
-  // 2. Instant Frontend Filtering & Sorting (Remains untouched!)
+  // 2. Instant Frontend Filtering & Smart Sorting 
   const displayedProducts = useMemo(() => {
     let result = [...rawProducts];
 
@@ -87,67 +87,76 @@ const CategoryPage = () => {
       });
     }
 
-    // Sort Results
-    if (sortOption === "price_low") {
-      result.sort((a, b) => a.price - b.price);
-    } else if (sortOption === "price_high") {
-      result.sort((a, b) => b.price - a.price);
-    } else if (sortOption === "newest") {
-      result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // Filter by Material
+    if (selectedMaterials.length > 0) {
+      result = result.filter(product => {
+        return selectedMaterials.some(mat => 
+          product.name?.toLowerCase().includes(mat.toLowerCase()) || 
+          product.type?.toLowerCase().includes(mat.toLowerCase()) ||
+          product.specifications?.toLowerCase().includes(mat.toLowerCase())
+        );
+      });
     }
 
-    return result;
-  }, [rawProducts, selectedPrices, sortOption]);
+    // --- SMART SORTING LOGIC ---
+    result.sort((a, b) => {
+      // Step 1: ALWAYS Push Out of Stock items to the bottom
+      const aInStock = a.stock_quantity > 0 ? 1 : 0;
+      const bInStock = b.stock_quantity > 0 ? 1 : 0;
+      
+      if (aInStock !== bInStock) {
+        return bInStock - aInStock; // In-stock items (1) come before OOS items (0)
+      }
 
-  // 3. Handlers
+      // Step 2: Apply the user's selected sort ONLY among items with the same stock status
+      if (sortOption === "price_low") {
+        return a.price - b.price;
+      } else if (sortOption === "price_high") {
+        return b.price - a.price;
+      } else if (sortOption === "newest") {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+      
+      return 0; // "Recommended" fallback
+    });
+
+    return result;
+  }, [rawProducts, selectedPrices, selectedMaterials, sortOption]);
+
+  // Handlers
   const togglePriceFilter = (range: string) => {
-    setSelectedPrices(prev => 
-      prev.includes(range) ? prev.filter(p => p !== range) : [...prev, range]
-    );
+    setSelectedPrices(prev => prev.includes(range) ? prev.filter(p => p !== range) : [...prev, range]);
+  };
+
+  const toggleMaterialFilter = (mat: string) => {
+    setSelectedMaterials(prev => prev.includes(mat) ? prev.filter(m => m !== mat) : [...prev, mat]);
   };
 
   const clearAllFilters = () => {
     setSelectedPrices([]);
+    setSelectedMaterials([]); 
   };
+
+  const SORT_OPTIONS = [
+    { id: 'recommended', label: 'Recommended' },
+    { id: 'newest', label: 'Newest First' },
+    { id: 'price_low', label: 'Price: Low to High' },
+    { id: 'price_high', label: 'Price: High to Low' },
+  ];
 
   return (
     <div className="min-h-screen flex flex-col bg-white font-sans">
       
-      {/* --- ADDED SEO HELMET LOGIC --- */}
       <Helmet>
         <title>{categoryName ? `${categoryName} | Sarvaa Fine Jewelry` : "Collection | Sarvaa Fine Jewelry"}</title>
         <meta name="description" content={`Explore our exclusive collection of ${categoryName ? categoryName.toLowerCase() : 'fine jewelry'}, crafted with precision and timeless elegance.`} />
         <link rel="canonical" href={`https://sarvaajewelry.com/category/${slug || 'all'}`} />
         
-        {/* Open Graph Tags */}
         <meta property="og:title" content={categoryName ? `${categoryName} | Sarvaa Fine Jewelry` : "Collection | Sarvaa Fine Jewelry"} />
         <meta property="og:description" content={`Explore our exclusive collection of ${categoryName ? categoryName.toLowerCase() : 'fine jewelry'}.`} />
         <meta property="og:url" content={`https://sarvaajewelry.com/category/${slug || 'all'}`} />
         <meta property="og:type" content="website" />
-
-        {/* JSON-LD Breadcrumb Schema for Google */}
-        <script type="application/ld+json">
-          {JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "BreadcrumbList",
-            "itemListElement": [
-              {
-                "@type": "ListItem",
-                "position": 1,
-                "name": "Home",
-                "item": "https://sarvaajewelry.com"
-              },
-              {
-                "@type": "ListItem",
-                "position": 2,
-                "name": categoryName || "Collection",
-                "item": `https://sarvaajewelry.com/category/${slug || 'all'}`
-              }
-            ]
-          })}
-        </script>
       </Helmet>
-      {/* --- END SEO HELMET LOGIC --- */}
 
       <Navbar />
 
@@ -191,7 +200,7 @@ const CategoryPage = () => {
             <div className="space-y-8 pb-10">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-bold text-gray-900 uppercase tracking-widest text-xs">Filters</h3>
-                {selectedPrices.length > 0 && (
+                {(selectedPrices.length > 0 || selectedMaterials.length > 0) && (
                   <button onClick={clearAllFilters} className="text-[10px] text-rose-600 underline cursor-pointer hover:text-rose-700">Clear All</button>
                 )}
               </div>
@@ -212,11 +221,15 @@ const CategoryPage = () => {
               
               <div className="h-px bg-gray-100" />
               
-              {/* MATERIAL PLACEHOLDER */}
               <FilterSection title="Material">
                 {MATERIAL_OPTIONS.map((mat) => (
                   <label key={mat} className="flex items-center gap-3 cursor-pointer group py-1">
-                    <input type="checkbox" className="w-4 h-4 rounded border-gray-300 text-rose-600 accent-rose-600 focus:ring-rose-500 cursor-pointer" />
+                    <input 
+                      type="checkbox" 
+                      checked={selectedMaterials.includes(mat)}
+                      onChange={() => toggleMaterialFilter(mat)}
+                      className="w-4 h-4 rounded border-gray-300 text-rose-600 accent-rose-600 focus:ring-rose-500 cursor-pointer" 
+                    />
                     <span className="text-sm text-gray-600 group-hover:text-rose-600 transition-colors">{mat}</span>
                   </label>
                 ))}
@@ -226,6 +239,8 @@ const CategoryPage = () => {
 
           {/* PRODUCT GRID */}
           <div className="flex-1 w-full">
+            
+            {/* DESKTOP SORT (Remains inline dropdown) */}
             <div className="hidden lg:flex justify-end items-center mb-6">
                <div className="flex items-center gap-3">
                  <span className="text-sm text-gray-500">Sort by:</span>
@@ -235,10 +250,7 @@ const CategoryPage = () => {
                       value={sortOption}
                       onChange={(e) => setSortOption(e.target.value)}
                     >
-                      <option value="recommended">Recommended</option>
-                      <option value="newest">Newest First</option>
-                      <option value="price_low">Price: Low to High</option>
-                      <option value="price_high">Price: High to Low</option>
+                      {SORT_OPTIONS.map(opt => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
                     </select>
                     <ChevronDown size={14} className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500" />
                  </div>
@@ -262,15 +274,25 @@ const CategoryPage = () => {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <Frown size={48} className="text-gray-300 mb-4" />
-                <p className="text-gray-500 mb-4">No products found matching your filters.</p>
-                {selectedPrices.length > 0 ? (
-                  <button onClick={clearAllFilters} className="text-rose-600 font-bold text-sm underline cursor-pointer">Clear Filters</button>
-                ) : (
-                  <Link to="/" className="text-rose-600 font-bold text-sm underline">Back Home</Link>
-                )}
-              </div>
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col items-center justify-center py-20 text-center px-4 bg-stone-50/50 rounded-2xl border border-stone-100"
+              >
+                <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm border border-stone-100 mb-6">
+                  <Filter size={24} className="text-stone-300" />
+                </div>
+                <h2 className="font-serif text-2xl text-stone-900 mb-3">Artistry takes time.</h2>
+                <p className="text-stone-500 text-sm max-w-md mx-auto mb-8 leading-relaxed">
+                  We are constantly crafting new pieces, but we currently don't have any items that exactly match your selected filters. 
+                </p>
+                <button 
+                  onClick={clearAllFilters} 
+                  className="bg-stone-900 text-white px-8 py-3.5 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-stone-800 transition-all shadow-md cursor-pointer"
+                >
+                  Clear All Filters
+                </button>
+              </motion.div>
             )}
           </div>
         </div>
@@ -284,31 +306,70 @@ const CategoryPage = () => {
           onClick={() => setIsMobileFilterOpen(true)} 
           className="flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-bold text-gray-800 uppercase tracking-widest border-r border-gray-100 active:bg-gray-50 relative"
         >
-          {selectedPrices.length > 0 && (
+          {(selectedPrices.length > 0 || selectedMaterials.length > 0) && (
             <span className="absolute top-1 right-[30%] w-2 h-2 bg-rose-600 rounded-full"></span>
           )}
           <SlidersHorizontal size={18} className="text-gray-600" /> 
           Filters
         </button>
-        <div className="flex-1 relative flex flex-col items-center justify-center">
-           <select 
-             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer z-10"
-             value={sortOption}
-             onChange={(e) => setSortOption(e.target.value)}
-           >
-             <option value="recommended">Recommended</option>
-             <option value="newest">Newest First</option>
-             <option value="price_low">Price: Low to High</option>
-             <option value="price_high">Price: High to Low</option>
-           </select>
-           <div className="flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50 pointer-events-none">
-             <ArrowUpDown size={18} className="text-gray-600" /> 
-             Sort
-           </div>
-        </div>
+        
+        {/* REPLACED NATIVE SELECT WITH CUSTOM BOTTOM SHEET TRIGGER */}
+        <button 
+          onClick={() => setIsMobileSortOpen(true)}
+          className="flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50 relative"
+        >
+          <ArrowUpDown size={18} className="text-gray-600" /> 
+          Sort
+        </button>
       </div>
 
-      {/* MOBILE FILTER MENU */}
+      {/* MOBILE SORT BOTTOM SHEET */}
+      <AnimatePresence>
+        {isMobileSortOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setIsMobileSortOpen(false)} 
+              className="fixed inset-0 bg-black/60 z-50 lg:hidden backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ y: "100%" }} 
+              animate={{ y: 0 }} 
+              exit={{ y: "100%" }} 
+              transition={{ type: "spring", damping: 25, stiffness: 300 }} 
+              className="fixed inset-x-0 bottom-0 max-h-[60vh] bg-white z-[60] shadow-2xl overflow-y-auto lg:hidden rounded-t-3xl pt-6 pb-[calc(2rem+env(safe-area-inset-bottom))]"
+            >
+              <div className="px-6 flex justify-between items-center mb-6">
+                <h2 className="font-serif text-xl text-gray-900">Sort By</h2>
+                <button onClick={() => setIsMobileSortOpen(false)} className="p-2 -mr-2 bg-gray-50 text-gray-400 hover:text-gray-900 rounded-full"><X size={18} /></button>
+              </div>
+              <div className="px-4 space-y-1">
+                {SORT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      setSortOption(opt.id);
+                      setTimeout(() => setIsMobileSortOpen(false), 200); // Small delay for UX
+                    }}
+                    className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl transition-all ${
+                      sortOption === opt.id ? 'bg-rose-50 border-rose-100' : 'bg-transparent border-transparent hover:bg-gray-50'
+                    } border`}
+                  >
+                    <span className={`text-sm font-medium ${sortOption === opt.id ? 'text-rose-700' : 'text-gray-700'}`}>
+                      {opt.label}
+                    </span>
+                    {sortOption === opt.id && <Check size={18} className="text-rose-600" />}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* MOBILE FILTER MENU (Unchanged) */}
       <AnimatePresence>
         {isMobileFilterOpen && (
           <>
@@ -317,7 +378,7 @@ const CategoryPage = () => {
               <div className="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
                 <h2 className="font-serif text-lg text-gray-900">Filters</h2>
                 <div className="flex items-center gap-4">
-                  {selectedPrices.length > 0 && (
+                  {(selectedPrices.length > 0 || selectedMaterials.length > 0) && (
                     <button onClick={clearAllFilters} className="text-[10px] text-rose-600 underline font-bold uppercase tracking-widest">Clear</button>
                   )}
                   <button onClick={() => setIsMobileFilterOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 cursor-pointer"><X size={20} /></button>
@@ -340,11 +401,15 @@ const CategoryPage = () => {
                  </FilterSection>
                  <div className="h-px bg-gray-100" />
                  
-                 {/* MATERIAL PLACEHOLDER */}
                  <FilterSection title="Material">
                     {MATERIAL_OPTIONS.map((m) => (
                       <label key={m} className="flex items-center gap-3 py-2 cursor-pointer">
-                        <input type="checkbox" className="w-5 h-5 rounded border-gray-300 text-rose-600 accent-rose-600 focus:ring-rose-500" />
+                        <input 
+                          type="checkbox" 
+                          checked={selectedMaterials.includes(m)}
+                          onChange={() => toggleMaterialFilter(m)}
+                          className="w-5 h-5 rounded border-gray-300 text-rose-600 accent-rose-600 focus:ring-rose-500" 
+                        />
                         <span className="text-sm text-gray-700">{m}</span>
                       </label>
                     ))}
