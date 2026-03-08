@@ -149,7 +149,7 @@ const LoginPage = () => {
 
       if (error) throw error;
 
-      // Safely sign out
+      // Safely sign out the hidden session so they HAVE to log in manually
       try {
         await Promise.race([
           supabase.auth.signOut(),
@@ -167,21 +167,19 @@ const LoginPage = () => {
         window.history.replaceState(null, "", window.location.pathname);
       }
 
-      setFormData({ name: "", email: "", password: "", gender: "" });
+      // 1. Switch back to the standard Login Form
       setIsUpdatePassword(false);
       setIsForgotPassword(false);
       setIsSignUp(false);
+      setFormData({ name: "", email: "", password: "", gender: "" });
       
-      // Success and redirect to home
-      setSuccessMsg("Password updated successfully! Redirecting to home...");
-      
-      setTimeout(() => {
-        navigate("/");
-      }, 1500);
+      // 2. Show the success message and STAY on this page
+      setSuccessMsg("Password updated successfully! Please log in with your new password.");
 
     } catch (err: any) {
       console.error("Update Password Error:", err);
       setError(err.message || "Failed to update password. Please try again.");
+    } finally {
       setIsLoading(false);
     }
   };
@@ -240,7 +238,7 @@ const LoginPage = () => {
         // 3. Determine the correct name
         const realName = customerData?.name || authData.user?.user_metadata?.full_name || formData.email.split('@')[0];
 
-        // 4. THE FIX: If Auth Metadata is missing the name, permanently fix it
+        // 4. If Auth Metadata is missing the name, permanently fix it
         if (!authData.user?.user_metadata?.full_name && realName !== formData.email.split('@')[0]) {
            supabase.auth.updateUser({ data: { full_name: realName } }).catch(() => {});
         }
@@ -256,6 +254,7 @@ const LoginPage = () => {
     } catch (err: any) {
       console.error("Auth Error:", err);
       setError(err.message || "Failed to authenticate. Please try again.");
+    } finally {
       setIsLoading(false);
     }
   };
@@ -311,7 +310,7 @@ const LoginPage = () => {
                   </div>
 
                   <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
-                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Save Password & Login"}
+                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Save Password"}
                   </button>
 
                   {/* CANCEL BUTTON: Kills Ghost Session */}
