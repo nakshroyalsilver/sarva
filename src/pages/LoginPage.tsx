@@ -190,7 +190,7 @@ const LoginPage = () => {
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleEmailAuth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
@@ -232,14 +232,26 @@ const LoginPage = () => {
         handlePostLoginRouting();
 
       } else {
+        // --- 1. Sign In ---
         const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
           email: formData.email, password: formData.password,
         });
         if (signInError) throw signInError;
 
+        // --- 2. Fetch the real name from the Database ---
         const { data: customerData } = await supabase.from('customers').select('*').eq('email', formData.email).single();
 
-        localStorage.setItem("currentUser", JSON.stringify(customerData || { email: formData.email, name: formData.email.split('@')[0] }));
+        // --- 3. Determine the correct name ---
+        const realName = customerData?.name || authData.user?.user_metadata?.full_name || formData.email.split('@')[0];
+
+        // --- 4. THE FIX: If Auth Metadata is missing the name, permanently fix it so Navbar doesn't ruin it! ---
+        if (!authData.user?.user_metadata?.full_name && realName !== formData.email.split('@')[0]) {
+           supabase.auth.updateUser({ data: { full_name: realName } }).catch(() => {});
+        }
+
+        // --- 5. Save the final, correct data ---
+        const finalUserData = { email: formData.email, name: realName, ...(customerData || {}) };
+        localStorage.setItem("currentUser", JSON.stringify(finalUserData));
         localStorage.setItem("isLoggedIn", "true");
         
         setSuccessMsg("Welcome back! Redirecting...");
