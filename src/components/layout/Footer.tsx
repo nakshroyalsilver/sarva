@@ -19,7 +19,7 @@ const faqs = [
   },
   {
     question: "What is your return and exchange policy?",
-    answer: "We offer a 30-day 'No Questions Asked' return policy. If you don't love it, simply initiate a return from your profile, and we will pick it up for free."
+    answer: "We offer a 7-day 'No Questions Asked' return policy. If you don't love it, simply initiate a return from your profile, and we will pick it up for free."
   },
   {
     question: "How can I track my order?",

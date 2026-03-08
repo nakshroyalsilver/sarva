@@ -13,7 +13,9 @@ const LoginPage = () => {
   // --- 1. SUPER INITIALIZATION: Catch the clue before Supabase erases it ---
   const [isUpdatePassword, setIsUpdatePassword] = useState(() => {
     if (typeof window !== "undefined") {
-      const isReset = window.location.search.includes("reset=true") || window.location.hash.includes("type=recovery");
+      const searchParams = new URLSearchParams(window.location.search);
+      const isReset = searchParams.get("reset") === "true" || window.location.hash.includes("type=recovery");
+      
       if (isReset) {
         sessionStorage.setItem("isRecovering", "true");
         return true;
@@ -34,33 +36,35 @@ const LoginPage = () => {
     name: "", email: "", password: "", gender: ""
   });
 
-  // --- 2. LISTENERS & REDIRECTS ---
+  // --- 2. THE TAB-ISOLATED LISTENER ---
   useEffect(() => {
-    // Listen for Supabase's cross-tab broadcast 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      
+      // GATEKEEPER: Does THIS specific tab have the right to be in recovery mode?
+      const hasUrlClue = window.location.search.includes("reset=true") || window.location.hash.includes("type=recovery");
+      const hasSessionClue = sessionStorage.getItem("isRecovering") === "true";
+      const isThisTabRecovering = hasUrlClue || hasSessionClue;
+
       if (event === 'PASSWORD_RECOVERY') {
-        sessionStorage.setItem("isRecovering", "true");
-        setIsUpdatePassword(true);
-        setIsForgotPassword(false);
-        setIsSignUp(false);
+        if (isThisTabRecovering) {
+          sessionStorage.setItem("isRecovering", "true");
+          setIsUpdatePassword(true);
+          setIsForgotPassword(false);
+          setIsSignUp(false);
+        }
+      } else if (event === 'SIGNED_IN') {
+        if (!isThisTabRecovering && !isForgotPassword) {
+          handlePostLoginRouting();
+        }
       }
     });
 
-    // Patience timer: Only redirect if NOT recovering
-    const timer = setTimeout(() => {
-      const isRecovering = sessionStorage.getItem("isRecovering") === "true";
-      if (!isRecovering && localStorage.getItem("currentUser")) {
-        navigate("/profile");
-      }
-    }, 400);
-
     return () => {
-      clearTimeout(timer);
       if (authListener && authListener.subscription) {
         authListener.subscription.unsubscribe();
       }
     };
-  }, [navigate]);
+  }, [navigate, isForgotPassword]); 
 
   // --- Handlers ---
   const handlePostLoginRouting = () => {
@@ -103,7 +107,8 @@ const LoginPage = () => {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  // Fixed React Form Event Typing
+  const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!formData.email) {
       setError("Please enter your email address first.");
@@ -115,9 +120,8 @@ const LoginPage = () => {
     setSuccessMsg("");
 
     try {
-      // --- THE CRITICAL FIX: We attach ?reset=true to the email link ---
       const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${window.location.origin}/login?reset=true`, 
+        redirectTo: `http://localhost:8080/login?reset=true`, 
       });
       if (error) throw error;
       
@@ -138,22 +142,20 @@ const LoginPage = () => {
     }
   };
 
-  // --- STRICT UPDATE PASSWORD FLOW WITH CRASH-PROOF SIGNOUT ---
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  // Fixed React Form Event Typing
+  const handleUpdatePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
     setSuccessMsg("");
 
     try {
-      // 1. Update the password securely
       const { error } = await supabase.auth.updateUser({
         password: formData.password
       });
 
       if (error) throw error;
 
-      // 2. Safely sign out with the Crash-Proof Timer
       try {
         await Promise.race([
           supabase.auth.signOut(),
@@ -163,23 +165,19 @@ const LoginPage = () => {
         console.warn("Backend logout lock ignored.");
       }
       
-      // 3. Clear all local storage & session traces
       localStorage.removeItem("currentUser");
       localStorage.removeItem("isLoggedIn");
-      sessionStorage.removeItem("isRecovering"); // Unlocks the UI completely
+      sessionStorage.removeItem("isRecovering"); 
 
-      // 4. Completely wipe the ?reset=true clue from the browser URL
       if (window.history.replaceState) {
         window.history.replaceState(null, "", window.location.pathname);
       }
 
-      // 5. Reset the UI back to the standard login form
       setFormData({ name: "", email: "", password: "", gender: "" });
       setIsUpdatePassword(false);
       setIsForgotPassword(false);
       setIsSignUp(false);
       
-      // 6. Show Success Message
       setSuccessMsg("Password updated successfully! Please log in with your new password.");
 
     } catch (err: any) {
@@ -190,7 +188,8 @@ const LoginPage = () => {
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  // Fixed React Form Event Typing
+  const handleEmailAuth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
@@ -306,8 +305,8 @@ const LoginPage = () => {
                   <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
                     {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Save Password & Login"}
                   </button>
-
-                  {/* CANCEL BUTTON: Lets the user escape the locked UI */}
+                  
+                  {/* NEW CANCEL BUTTON: In case they get stuck or change their mind */}
                   <div className="mt-4 text-center">
                     <button type="button" onClick={() => { 
                       setIsUpdatePassword(false); 
@@ -315,6 +314,7 @@ const LoginPage = () => {
                       if (window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
                       setError(""); 
                       setSuccessMsg(""); 
+                      supabase.auth.signOut().catch(() => {});
                     }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
                       <ArrowLeft size={14} /> Cancel Reset
                     </button>
