@@ -10,10 +10,12 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // --- 1. SUPER INITIALIZATION: Catch the clue before Supabase erases it ---
+  // --- 1. SUPER INITIALIZATION: Tab Isolation ---
   const [isUpdatePassword, setIsUpdatePassword] = useState(() => {
     if (typeof window !== "undefined") {
-      const isReset = window.location.search.includes("reset=true") || window.location.hash.includes("type=recovery");
+      const searchParams = new URLSearchParams(window.location.search);
+      const isReset = searchParams.get("reset") === "true" || window.location.hash.includes("type=recovery");
+      
       if (isReset) {
         sessionStorage.setItem("isRecovering", "true");
         return true;
@@ -34,33 +36,34 @@ const LoginPage = () => {
     name: "", email: "", password: "", gender: ""
   });
 
-  // --- 2. LISTENERS & REDIRECTS ---
+  // --- 2. LISTENERS ---
   useEffect(() => {
-    // Listen for Supabase's cross-tab broadcast 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      
+      const hasUrlClue = window.location.search.includes("reset=true") || window.location.hash.includes("type=recovery");
+      const hasSessionClue = sessionStorage.getItem("isRecovering") === "true";
+      const isThisTabRecovering = hasUrlClue || hasSessionClue;
+
       if (event === 'PASSWORD_RECOVERY') {
-        sessionStorage.setItem("isRecovering", "true");
-        setIsUpdatePassword(true);
-        setIsForgotPassword(false);
-        setIsSignUp(false);
+        if (isThisTabRecovering) {
+          sessionStorage.setItem("isRecovering", "true");
+          setIsUpdatePassword(true);
+          setIsForgotPassword(false);
+          setIsSignUp(false);
+        }
+      } else if (event === 'SIGNED_IN') {
+        if (!isThisTabRecovering && !isForgotPassword) {
+          handlePostLoginRouting();
+        }
       }
     });
 
-    // Patience timer: Only redirect if NOT recovering
-    const timer = setTimeout(() => {
-      const isRecovering = sessionStorage.getItem("isRecovering") === "true";
-      if (!isRecovering && localStorage.getItem("currentUser")) {
-        navigate("/profile");
-      }
-    }, 400);
-
     return () => {
-      clearTimeout(timer);
       if (authListener && authListener.subscription) {
         authListener.subscription.unsubscribe();
       }
     };
-  }, [navigate]);
+  }, [navigate, isForgotPassword]); 
 
   // --- Handlers ---
   const handlePostLoginRouting = () => {
@@ -103,7 +106,7 @@ const LoginPage = () => {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!formData.email) {
       setError("Please enter your email address first.");
@@ -115,7 +118,7 @@ const LoginPage = () => {
     setSuccessMsg("");
 
     try {
-      // --- THE CRITICAL FIX: We attach ?reset=true to the email link ---
+      // Dynamically uses your current URL (localhost or vercel)
       const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
         redirectTo: `${window.location.origin}/login?reset=true`, 
       });
@@ -138,22 +141,20 @@ const LoginPage = () => {
     }
   };
 
-  // --- STRICT UPDATE PASSWORD FLOW WITH CRASH-PROOF SIGNOUT ---
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
     setSuccessMsg("");
 
     try {
-      // 1. Update the password securely
       const { error } = await supabase.auth.updateUser({
         password: formData.password
       });
 
       if (error) throw error;
 
-      // 2. Safely sign out with the Crash-Proof Timer
+      // Crash-proof background logout
       try {
         await Promise.race([
           supabase.auth.signOut(),
@@ -163,29 +164,32 @@ const LoginPage = () => {
         console.warn("Backend logout lock ignored.");
       }
       
-      // 3. Clear all local storage & session traces
+      // Clear memory
       localStorage.removeItem("currentUser");
       localStorage.removeItem("isLoggedIn");
-      sessionStorage.removeItem("isRecovering"); // Unlocks the UI completely
+      sessionStorage.removeItem("isRecovering"); 
 
-      // 4. Completely wipe the ?reset=true clue from the browser URL
+      // Wipe URL
       if (window.history.replaceState) {
         window.history.replaceState(null, "", window.location.pathname);
       }
 
-      // 5. Reset the UI back to the standard login form
+      // Reset state
       setFormData({ name: "", email: "", password: "", gender: "" });
       setIsUpdatePassword(false);
       setIsForgotPassword(false);
       setIsSignUp(false);
       
-      // 6. Show Success Message
-      setSuccessMsg("Password updated successfully! Please log in with your new password.");
+      // --- THE REDIRECT FIX ---
+      setSuccessMsg("Password updated successfully! Redirecting to home...");
+      
+      setTimeout(() => {
+        navigate("/"); // Automatically send them to the home page!
+      }, 1500);
 
     } catch (err: any) {
       console.error("Update Password Error:", err);
       setError(err.message || "Failed to update password. Please try again.");
-    } finally {
       setIsLoading(false);
     }
   };
@@ -244,7 +248,7 @@ const LoginPage = () => {
         // --- 3. Determine the correct name ---
         const realName = customerData?.name || authData.user?.user_metadata?.full_name || formData.email.split('@')[0];
 
-        // --- 4. THE FIX: If Auth Metadata is missing the name, permanently fix it so Navbar doesn't ruin it! ---
+        // --- 4. THE NAME METADATA FIX ---
         if (!authData.user?.user_metadata?.full_name && realName !== formData.email.split('@')[0]) {
            supabase.auth.updateUser({ data: { full_name: realName } }).catch(() => {});
         }
@@ -319,7 +323,7 @@ const LoginPage = () => {
                     {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Save Password & Login"}
                   </button>
 
-                  {/* CANCEL BUTTON: Lets the user escape the locked UI */}
+                  {/* CANCEL BUTTON: Also logs out the silent ghost session! */}
                   <div className="mt-4 text-center">
                     <button type="button" onClick={() => { 
                       setIsUpdatePassword(false); 
@@ -327,6 +331,7 @@ const LoginPage = () => {
                       if (window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
                       setError(""); 
                       setSuccessMsg(""); 
+                      supabase.auth.signOut().catch(() => {}); // Kills the ghost session
                     }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
                       <ArrowLeft size={14} /> Cancel Reset
                     </button>
