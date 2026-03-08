@@ -6,12 +6,10 @@ import Footer from "@/components/layout/Footer";
 import { supabase } from "../../supabase"; 
 import { Helmet } from "react-helmet-async";
 
-// --- THE BULLETPROOF CATCHER ---
-// This runs instantly the millisecond the page loads, BEFORE Supabase can clear the URL.
+// --- 1. SUPER INITIALIZATION: Catch the clue before Supabase erases it ---
 if (typeof window !== "undefined") {
   const url = window.location.href;
-  if (url.includes("type=recovery") || url.includes("mode=reset")) {
-    // We lock this state in the browser's short-term memory so it survives URL clearing
+  if (url.includes("type=recovery") || url.includes("reset=true")) {
     sessionStorage.setItem("isRecovering", "true");
   }
 }
@@ -20,7 +18,6 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // --- States ---
   const [isSignUp, setIsSignUp] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   
@@ -37,14 +34,22 @@ const LoginPage = () => {
     name: "", email: "", password: "", gender: ""
   });
 
-  // --- 1. LISTEN FOR SUPABASE BACKUP SIGNAL ---
+  // --- 2. TAB-ISOLATED LISTENER ---
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      const isRecovering = sessionStorage.getItem("isRecovering") === "true";
+
       if (event === 'PASSWORD_RECOVERY') {
-        sessionStorage.setItem("isRecovering", "true");
-        setIsUpdatePassword(true);
-        setIsForgotPassword(false);
-        setIsSignUp(false);
+        if (isRecovering) {
+          setIsUpdatePassword(true);
+          setIsForgotPassword(false);
+          setIsSignUp(false);
+        }
+      } else if (event === 'SIGNED_IN') {
+        // Dynamic redirect: Catch Google Auth and standard logins instantly
+        if (!isRecovering && !isForgotPassword) {
+          handlePostLoginRouting();
+        }
       }
     });
 
@@ -53,20 +58,7 @@ const LoginPage = () => {
         authListener.subscription.unsubscribe();
       }
     };
-  }, []);
-
-  // --- 2. REDIRECT LOGIC ---
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const isRecovering = sessionStorage.getItem("isRecovering") === "true";
-      // ONLY redirect if they are normally logged in and NOT trying to recover a password
-      if (!isRecovering && localStorage.getItem("currentUser")) {
-        navigate("/profile");
-      }
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [navigate, isUpdatePassword]);
+  }, [navigate, isForgotPassword]);
 
   // --- Handlers ---
   const handlePostLoginRouting = () => {
@@ -90,8 +82,9 @@ const LoginPage = () => {
 
     localStorage.setItem("checkout_step", "3");
 
+    // Redirect defaults to Home Page ("/")
     const searchParams = new URLSearchParams(location.search);
-    const redirectUrl = searchParams.get("redirect") || "/profile";
+    const redirectUrl = searchParams.get("redirect") || "/"; 
     
     setTimeout(() => navigate(redirectUrl), 800);
   };
@@ -109,7 +102,7 @@ const LoginPage = () => {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
+  const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!formData.email) {
       setError("Please enter your email address first.");
@@ -122,7 +115,7 @@ const LoginPage = () => {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${window.location.origin}/login?mode=reset`, 
+        redirectTo: `${window.location.origin}/login?reset=true`, 
       });
       if (error) throw error;
       
@@ -143,22 +136,20 @@ const LoginPage = () => {
     }
   };
 
-  // --- STRICT UPDATE PASSWORD FLOW WITH CRASH-PROOF SIGNOUT ---
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
     setSuccessMsg("");
 
     try {
-      // 1. Update the password securely
       const { error } = await supabase.auth.updateUser({
         password: formData.password
       });
 
       if (error) throw error;
 
-      // 2. Safely sign out with the Crash-Proof Timer
+      // Safely sign out
       try {
         await Promise.race([
           supabase.auth.signOut(),
@@ -168,34 +159,34 @@ const LoginPage = () => {
         console.warn("Backend logout lock ignored.");
       }
       
-      // 3. Clear all local storage & session traces
       localStorage.removeItem("currentUser");
       localStorage.removeItem("isLoggedIn");
-      sessionStorage.removeItem("isRecovering"); // Completely unlocks the UI
+      sessionStorage.removeItem("isRecovering");
 
-      // 4. Completely wipe the ?mode=reset clue from the URL
       if (window.history.replaceState) {
         window.history.replaceState(null, "", window.location.pathname);
       }
 
-      // 5. Reset the UI back to the standard login form
       setFormData({ name: "", email: "", password: "", gender: "" });
       setIsUpdatePassword(false);
       setIsForgotPassword(false);
       setIsSignUp(false);
       
-      // 6. Show Success Message
-      setSuccessMsg("Password updated successfully! Please log in with your new password.");
+      // Success and redirect to home
+      setSuccessMsg("Password updated successfully! Redirecting to home...");
+      
+      setTimeout(() => {
+        navigate("/");
+      }, 1500);
 
     } catch (err: any) {
       console.error("Update Password Error:", err);
       setError(err.message || "Failed to update password. Please try again.");
-    } finally {
       setIsLoading(false);
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
+  const handleEmailAuth = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
@@ -237,14 +228,26 @@ const LoginPage = () => {
         handlePostLoginRouting();
 
       } else {
+        // 1. Sign In
         const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
           email: formData.email, password: formData.password,
         });
         if (signInError) throw signInError;
 
+        // 2. Fetch the real name from the Database
         const { data: customerData } = await supabase.from('customers').select('*').eq('email', formData.email).single();
 
-        localStorage.setItem("currentUser", JSON.stringify(customerData || { email: formData.email, name: formData.email.split('@')[0] }));
+        // 3. Determine the correct name
+        const realName = customerData?.name || authData.user?.user_metadata?.full_name || formData.email.split('@')[0];
+
+        // 4. THE FIX: If Auth Metadata is missing the name, permanently fix it
+        if (!authData.user?.user_metadata?.full_name && realName !== formData.email.split('@')[0]) {
+           supabase.auth.updateUser({ data: { full_name: realName } }).catch(() => {});
+        }
+
+        // 5. Save the final, correct data
+        const finalUserData = { email: formData.email, name: realName, ...(customerData || {}) };
+        localStorage.setItem("currentUser", JSON.stringify(finalUserData));
         localStorage.setItem("isLoggedIn", "true");
         
         setSuccessMsg("Welcome back! Redirecting...");
@@ -253,7 +256,6 @@ const LoginPage = () => {
     } catch (err: any) {
       console.error("Auth Error:", err);
       setError(err.message || "Failed to authenticate. Please try again.");
-    } finally {
       setIsLoading(false);
     }
   };
@@ -311,8 +313,8 @@ const LoginPage = () => {
                   <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
                     {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Save Password & Login"}
                   </button>
-                  
-                  {/* NEW CANCEL BUTTON: In case they get stuck or change their mind */}
+
+                  {/* CANCEL BUTTON: Kills Ghost Session */}
                   <div className="mt-4 text-center">
                     <button type="button" onClick={() => { 
                       setIsUpdatePassword(false); 
@@ -320,6 +322,7 @@ const LoginPage = () => {
                       if (window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
                       setError(""); 
                       setSuccessMsg(""); 
+                      supabase.auth.signOut().catch(() => {});
                     }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
                       <ArrowLeft size={14} /> Cancel Reset
                     </button>
