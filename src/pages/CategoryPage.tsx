@@ -8,6 +8,7 @@ import ProductCard from "@/components/ProductCard";
 import { supabase } from "../../supabase";
 import { Helmet } from "react-helmet-async"; 
 import { useQuery } from "@tanstack/react-query"; 
+import { analytics } from "@/lib/analytics"; // <-- NEW: Analytics Import
 
 const PRICE_RANGES = ["Under ₹1000", "₹1000 - ₹2500", "₹2500 - ₹5000", "Above ₹5000"];
 const MATERIAL_OPTIONS = ["925 Sterling Silver", "Rose Gold Plated", "Oxidized Silver", "Gold Plated"];
@@ -17,7 +18,7 @@ const CategoryPage = () => {
   
   // UI State
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
-  const [isMobileSortOpen, setIsMobileSortOpen] = useState(false); // <-- ADDED SORT SHEET STATE
+  const [isMobileSortOpen, setIsMobileSortOpen] = useState(false); 
   
   // Filter & Sort State
   const [sortOption, setSortOption] = useState("recommended");
@@ -62,6 +63,13 @@ const CategoryPage = () => {
   const rawProducts = data?.products || [];
   const categoryName = data?.categoryName || (slug === 'new' ? 'New Arrivals' : slug === 'all' ? 'All Collections' : '');
 
+  // --- NEW: Track Category View for Google Analytics ---
+  useEffect(() => {
+    if (rawProducts && rawProducts.length > 0) {
+      analytics.trackViewCategory(categoryName, rawProducts);
+    }
+  }, [rawProducts, categoryName]);
+
   // Reset filters and scroll to top when the category URL changes
   useEffect(() => {
     setSelectedPrices([]);
@@ -91,6 +99,7 @@ const CategoryPage = () => {
     if (selectedMaterials.length > 0) {
       result = result.filter(product => {
         return selectedMaterials.some(mat => 
+          mat === "925 Sterling Silver" || 
           product.name?.toLowerCase().includes(mat.toLowerCase()) || 
           product.type?.toLowerCase().includes(mat.toLowerCase()) ||
           product.specifications?.toLowerCase().includes(mat.toLowerCase())
@@ -160,40 +169,54 @@ const CategoryPage = () => {
 
       <Navbar />
 
-      <main className="flex-grow pt-4 pb-20">
-        <div className="container mx-auto px-4 lg:px-6 mb-6">
-          <div className="text-[10px] md:text-[11px] text-gray-500 mb-4 md:mb-6 uppercase tracking-widest font-medium flex items-center">
-            <Link to="/" className="hover:text-rose-600 transition-colors">Home</Link> 
-            <span className="mx-2 text-gray-300">/</span> 
-            <span className="text-gray-900 capitalize font-semibold">{isLoading ? "..." : categoryName}</span>
-          </div>
+      <main className="flex-grow pt-4 md:pt-6 pb-20">
+        <div className="container mx-auto px-4 lg:px-6 mb-6 md:mb-10">
+          
+          {/* --- BEAUTIFIED ROSE RED TINTED HERO BANNER --- */}
+          <div className="relative rounded-2xl overflow-hidden bg-rose-100 min-h-[180px] md:min-h-[220px] flex items-center shadow-sm border border-rose-200">
+            
+           
+           
 
-          <div className="border-b border-stone-200 pb-8 md:pb-12 mb-4 mt-2">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-              <div className="max-w-2xl">
-                <h1 className="font-serif text-4xl md:text-5xl lg:text-6xl text-stone-900 capitalize tracking-tight mb-4">
-                  {isLoading ? "Loading Collection..." : categoryName}
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, ease: "easeOut" }}
+              className="relative z-10 w-full px-6 md:px-12 py-8 flex flex-col items-start"
+            >
+              {/* Left Side Breadcrumbs */}
+              <div className="flex items-center text-[9px] md:text-[10px] text-rose-800 uppercase tracking-[0.25em] font-bold mb-4">
+                <Link to="/" className="hover:text-rose-600 transition-colors">Home</Link> 
+                <span className="mx-2 md:mx-3 text-rose-400">/</span> 
+                <span className="text-stone-900">{isLoading ? "..." : categoryName}</span>
+              </div>
+
+              {/* Main Elegant Title & Description */}
+              <div className="max-w-lg text-left">
+                <h1 className="font-serif text-3xl md:text-5xl text-stone-950 capitalize tracking-wide mb-3">
+                  {isLoading ? "Loading..." : categoryName}
                 </h1>
-                <p className="text-stone-500 text-sm md:text-base font-light leading-relaxed">
+
+                <p className="text-stone-700 text-xs md:text-sm font-light leading-relaxed mb-6">
                   {isLoading 
                     ? "Curating our finest pieces for you..." 
                     : `Explore our exclusive collection of ${categoryName.toLowerCase()}, crafted with precision and timeless elegance.`}
                 </p>
-              </div>
-              
-              {!isLoading && (
-                <div className="flex items-center gap-4 shrink-0 mt-2 md:mt-0">
-                  <span className="hidden md:block w-12 h-px bg-stone-300"></span>
-                  <span className="inline-flex items-center justify-center text-[10px] md:text-xs font-bold tracking-[0.2em] uppercase text-stone-500 bg-stone-50 px-4 py-2 rounded-full border border-stone-200 shadow-sm">
+
+                {/* Chic Product Count Badge */}
+                {!isLoading && (
+                  <div className="inline-flex items-center justify-center text-[9px] md:text-[10px] font-bold tracking-[0.2em] uppercase text-rose-800 bg-white/80 backdrop-blur-md px-5 py-2.5 rounded-full shadow-sm border border-rose-200">
                     {displayedProducts.length} {displayedProducts.length === 1 ? 'Piece' : 'Pieces'}
-                  </span>
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
           </div>
+          {/* --- END HERO BANNER --- */}
+
         </div>
 
-        <div className="container mx-auto px-4 lg:px-6 flex gap-8 items-start relative mt-4 md:mt-6">
+        <div className="container mx-auto px-4 lg:px-6 flex gap-8 items-start relative">
           
           {/* DESKTOP SIDEBAR */}
           <aside className="hidden lg:block w-64 flex-shrink-0 sticky top-28 h-[calc(100vh-120px)] overflow-y-auto pr-4 custom-scrollbar">
@@ -240,7 +263,7 @@ const CategoryPage = () => {
           {/* PRODUCT GRID */}
           <div className="flex-1 w-full">
             
-            {/* DESKTOP SORT (Remains inline dropdown) */}
+            {/* DESKTOP SORT */}
             <div className="hidden lg:flex justify-end items-center mb-6">
                <div className="flex items-center gap-3">
                  <span className="text-sm text-gray-500">Sort by:</span>
@@ -313,7 +336,6 @@ const CategoryPage = () => {
           Filters
         </button>
         
-        {/* REPLACED NATIVE SELECT WITH CUSTOM BOTTOM SHEET TRIGGER */}
         <button 
           onClick={() => setIsMobileSortOpen(true)}
           className="flex-1 flex flex-col items-center justify-center gap-1 py-2 text-[10px] font-bold text-gray-800 uppercase tracking-widest active:bg-gray-50 relative"
@@ -351,7 +373,7 @@ const CategoryPage = () => {
                     key={opt.id}
                     onClick={() => {
                       setSortOption(opt.id);
-                      setTimeout(() => setIsMobileSortOpen(false), 200); // Small delay for UX
+                      setTimeout(() => setIsMobileSortOpen(false), 200); 
                     }}
                     className={`w-full flex items-center justify-between px-4 py-3.5 rounded-xl transition-all ${
                       sortOption === opt.id ? 'bg-rose-50 border-rose-100' : 'bg-transparent border-transparent hover:bg-gray-50'
@@ -369,7 +391,7 @@ const CategoryPage = () => {
         )}
       </AnimatePresence>
 
-      {/* MOBILE FILTER MENU (Unchanged) */}
+      {/* MOBILE FILTER MENU */}
       <AnimatePresence>
         {isMobileFilterOpen && (
           <>

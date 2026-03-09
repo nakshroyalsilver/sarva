@@ -8,6 +8,7 @@ import ProductCard from "@/components/ProductCard";
 import { Helmet } from "react-helmet-async";
 import { supabase } from "../../supabase"; 
 import { useQuery } from "@tanstack/react-query"; // <-- ADDED TANSTACK QUERY
+import { analytics } from "@/lib/analytics"; // <-- NEW: Analytics Import
 
 const SearchResultsPage = () => {
   const [searchParams] = useSearchParams();
@@ -46,6 +47,13 @@ const SearchResultsPage = () => {
   // Ensure window is at top when search changes
   useEffect(() => {
     window.scrollTo(0, 0);
+  }, [query]);
+
+  // --- NEW: Track Search Event for Google Analytics ---
+  useEffect(() => {
+    if (query) {
+      analytics.trackSearch(query);
+    }
   }, [query]);
 
   // --- Live Sorting Logic (Unchanged) ---

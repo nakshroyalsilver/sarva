@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { HelmetProvider } from "react-helmet-async"; // <-- SEO Import Added Here
+import { HelmetProvider } from "react-helmet-async"; 
 
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -25,19 +25,21 @@ import AboutUs from "./pages/AboutUs";
 import ShippingReturns from "./pages/ShippingReturns";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
+import RouteTracker from "./components/RouteTracker";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  // --- HELMET PROVIDER WRAPPING EVERYTHING ---
   <HelmetProvider>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
+         
+          <RouteTracker />
+          
           <CartProvider>
-            {/* --- PINCODE MODAL ADDED HERE --- */}
             <PincodeModal /> 
 
             <Routes>
@@ -45,7 +47,6 @@ const App = () => (
               <Route path="/" element={<Index />} />
               <Route path="/category/:slug" element={<CategoryPage />} />
               <Route path="/product/:id" element={<ProductDetailPage />} />
-              
               <Route path="/wishlist" element={<WishlistPage />} />
               <Route path="/cart" element={<CartPage />} />
               <Route path="/checkout" element={<CheckoutPage />} />
@@ -58,12 +59,10 @@ const App = () => (
               <Route path="/shipping-returns" element={<ShippingReturns />} />
               <Route path="/privacy-policy" element={<PrivacyPolicy />} />
               <Route path="/terms-of-service" element={<TermsOfService />} />
-              
-              {/* --- ADDED MY ORDERS ROUTE --- */}
               <Route path="/my-orders" element={<MyOrders />} />
               
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
+              
             </Routes>
           </CartProvider>
         </BrowserRouter>

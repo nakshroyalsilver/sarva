@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, Navigate, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, ShieldCheck, CreditCard, Gift, Check, Banknote, ShoppingBag, CheckCircle2, MessageCircle, X, Tag, MapPin, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -8,6 +8,7 @@ import { useCart } from "@/context/CartContext";
 import { supabase } from "../../supabase"; 
 import emailjs from '@emailjs/browser';
 import { Helmet } from "react-helmet-async";
+import { analytics } from "../lib/analytics";
 
 const CheckoutPage = () => {
   const { state } = useLocation();
@@ -111,6 +112,9 @@ const CheckoutPage = () => {
   const [availableCoupons, setAvailableCoupons] = useState<any[]>([]);
   const [isLocating, setIsLocating] = useState(false);
 
+  // Reference to prevent double-firing Google Analytics events
+  const hasTrackedCheckout = useRef(false);
+
   useEffect(() => {
     const fetchActiveCoupons = async () => {
       const { data, error } = await supabase
@@ -128,14 +132,10 @@ const CheckoutPage = () => {
 
   const checkoutItems = state?.directPurchase ? [state.directPurchase] : cartItems;
 
-  if (!checkoutItems || checkoutItems.length === 0) {
-    return <Navigate to="/cart" />;
-  }
-
   // ==========================================
   // --- STRICT PRICING MATH LOGIC ---
   // ==========================================
-  const subtotal = checkoutItems.reduce((acc: number, item: any) => acc + (Number(item.price) * Number(item.qty)), 0);
+  const subtotal = checkoutItems?.reduce((acc: number, item: any) => acc + (Number(item.price) * Number(item.qty)), 0) || 0;
   
   useEffect(() => {
     if (appliedCoupon && subtotal < Number(appliedCoupon.min_order_value)) {
@@ -159,6 +159,18 @@ const CheckoutPage = () => {
   const amountNeededForFreeShipping = 5000 - subtotalAfterCoupon;
   const total = subtotalAfterCoupon + shipping;
   // ==========================================
+
+  // --- NEW: Track Checkout Initiated ---
+  useEffect(() => {
+    if (checkoutItems && checkoutItems.length > 0 && !hasTrackedCheckout.current) {
+      analytics.trackBeginCheckout(total, checkoutItems);
+      hasTrackedCheckout.current = true;
+    }
+  }, [checkoutItems, total]);
+
+  if (!checkoutItems || checkoutItems.length === 0) {
+    return <Navigate to="/cart" />;
+  }
 
   // --- COUPON HANDLERS ---
   const handleApplyCoupon = async (e: React.FormEvent) => {
@@ -365,6 +377,9 @@ const CheckoutPage = () => {
         throw rpcError;
       }
       // ========================================================
+
+      // --- NEW: TRACK SUCCESSFUL PURCHASE FOR GOOGLE ANALYTICS ---
+      analytics.trackWhatsAppOrder(newOrderId, total);
 
       // CLEAR THE CART AND CHECKOUT DRAFT ON SUCCESS
       if (!state?.directPurchase) {
@@ -905,7 +920,7 @@ Please let me know how to proceed with the payment. Thank you!`;
         </div>
       </main>
 
-      {/* --- NEW: SAVE ADDRESS PROMPT MODAL --- */}
+      {/* --- SAVE ADDRESS PROMPT MODAL --- */}
       <AnimatePresence>
         {showSaveAddressPrompt && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">

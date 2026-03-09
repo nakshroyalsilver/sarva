@@ -7,6 +7,7 @@ import Footer from "@/components/layout/Footer";
 import { useCart } from "@/context/CartContext"; 
 import { supabase } from "../../supabase"; 
 import { Helmet } from "react-helmet-async";
+import { analytics } from "@/lib/analytics"; // <-- NEW: Analytics Import
 
 const CartPage = () => {
   const navigate = useNavigate(); 
@@ -43,6 +44,13 @@ const CartPage = () => {
   const amountNeededForFreeShipping = 5000 - subtotal;
   
   const total = subtotal + shipping;
+
+  // --- NEW: Track Cart View for Google Analytics ---
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      analytics.trackViewCart(total, cartItems);
+    }
+  }, [cartItems.length]); // Only re-fires if the number of distinct items in the cart changes
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F9F9F9] font-sans">

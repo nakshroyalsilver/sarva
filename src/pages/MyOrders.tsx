@@ -86,19 +86,19 @@ const MyOrders = () => {
     staleTime: 1000 * 60 * 5, 
   });
 
-  // --- 2. FETCH REVIEWED PRODUCTS QUERY ---
+  // --- 2. FETCH REVIEWED PRODUCTS QUERY (UPDATED TO USE EMAIL) ---
   const { data: reviewedProducts = [] } = useQuery({
-    queryKey: ['reviewedProducts', user?.name],
+    queryKey: ['reviewedProducts', user?.email], // Updated to email
     queryFn: async () => {
       const { data, error } = await supabase
         .from('reviews')
         .select('product_id')
-        .eq('user_name', user.name);
+        .eq('user_email', user.email); // Updated to email to prevent Name collisions
         
       if (error) throw error;
       return data.map(r => r.product_id); 
     },
-    enabled: !!user?.name,
+    enabled: !!user?.email, // Updated to email
     staleTime: 1000 * 60 * 5,
   });
 
@@ -114,20 +114,30 @@ const MyOrders = () => {
     setCancelConfirmationOpen(true);
   };
 
+  // --- UPDATED SECURE CANCEL LOGIC ---
   const handleConfirmCancel = async () => {
     if (!selectedOrder) return;
     
     setIsUpdating(true);
     try {
-      const { error } = await supabase.from('orders').update({ status: 'Cancelled' }).eq('id', selectedOrder.id);
-      if (error) throw error;
-      
+      // 1. Mark the order as Cancelled in the database.
+      // Your new Supabase SQL trigger will automatically catch this and restore the inventory safely!
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ status: 'Cancelled' })
+        .eq('id', selectedOrder.id);
+        
+      if (orderError) throw orderError;
+
+      // 2. Update the UI
       setSelectedOrder({ ...selectedOrder, status: 'Cancelled' });
       await queryClient.invalidateQueries({ queryKey: ['myOrders', user?.email] });
       setCancelConfirmationOpen(false);
+      
     } catch (error) {
       console.error("Error cancelling order:", error);
       alert("Failed to cancel order.");
+      setCancelConfirmationOpen(false); // UX Fix: Close modal on failure
     } finally {
       setIsUpdating(false);
     }
@@ -153,6 +163,7 @@ const MyOrders = () => {
     }
   };
 
+  // --- UPDATED REVIEW SUBMISSION (USES EMAIL) ---
   const handleSubmitReview = async () => {
     if (rating === 0) {
       alert("Please select a star rating before submitting.");
@@ -162,6 +173,7 @@ const MyOrders = () => {
     try {
       const { error } = await supabase.from('reviews').insert({
         product_id: itemToReview.product_id,
+        user_email: user.email, // Added this line for strict unique identification
         user_name: user.name, 
         rating: rating,
         comment: reviewText   
@@ -169,8 +181,8 @@ const MyOrders = () => {
       if (error) throw error;
       alert("Thank you for your review!");
       
-      // Instantly update the reviewed products list
-      await queryClient.invalidateQueries({ queryKey: ['reviewedProducts', user?.name] });
+      // Instantly update the reviewed products list using email key
+      await queryClient.invalidateQueries({ queryKey: ['reviewedProducts', user?.email] }); 
       
       setReviewModalOpen(false);
       setReviewText("");

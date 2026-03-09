@@ -9,7 +9,8 @@ import { supabase } from "../../supabase";
 import ProductReviews from "@/components/home/ProductReviews";
 import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
-import AddToCartPopup from "../components/layout/AddToCartPopup"
+import AddToCartPopup from "../components/layout/AddToCartPopup";
+import { analytics } from "../lib/analytics"; // <-- NEW: Analytics import
 
 // --- CUSTOM QUILL HTML STYLING ---
 const quillStyles = `
@@ -121,6 +122,13 @@ const ProductDetailPage = () => {
   const product = pageData?.product;
   const similarProducts = pageData?.similarProducts || [];
 
+  // --- NEW: Track Product View for Google Analytics ---
+  useEffect(() => {
+    if (product) {
+      analytics.trackProductView(product);
+    }
+  }, [product]);
+
   useEffect(() => {
     window.scrollTo(0, 0);
     setActiveImage(0);
@@ -184,6 +192,9 @@ const ProductDetailPage = () => {
       addToCart(product, selectedSize || "Standard");
     }
     
+    // --- NEW: Track Add to Cart for Google Analytics ---
+    analytics.trackAddToCart(product, quantity);
+
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 2000);
 
@@ -206,6 +217,10 @@ const ProductDetailPage = () => {
     }
 
     addToCart(product, selectedSize || "Standard");
+    
+    // --- NEW: Track Add to Cart for Google Analytics ---
+    analytics.trackAddToCart(product, quantity);
+
     navigate("/checkout", { 
       state: { directPurchase: { ...product, qty: quantity, size: selectedSize || "Standard" } } 
     });

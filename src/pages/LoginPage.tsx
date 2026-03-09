@@ -5,6 +5,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { supabase } from "../../supabase"; 
 import { Helmet } from "react-helmet-async";
+import { analytics } from "@/lib/analytics"; // <-- NEW: Analytics Import
 
 // --- 1. SUPER INITIALIZATION: Catch the clue before Supabase erases it ---
 if (typeof window !== "undefined") {
@@ -222,6 +223,9 @@ const LoginPage = () => {
         localStorage.setItem("currentUser", JSON.stringify(userData));
         localStorage.setItem("isLoggedIn", "true");
 
+        // --- NEW: Track Sign Up for Google Analytics ---
+        analytics.trackSignUp("Email");
+
         setSuccessMsg("Account created! Redirecting...");
         handlePostLoginRouting();
 
@@ -248,6 +252,9 @@ const LoginPage = () => {
         localStorage.setItem("currentUser", JSON.stringify(finalUserData));
         localStorage.setItem("isLoggedIn", "true");
         
+        // --- NEW: Track Login for Google Analytics ---
+        analytics.trackLogin("Email");
+
         setSuccessMsg("Welcome back! Redirecting...");
         handlePostLoginRouting();
       }

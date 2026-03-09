@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { supabase } from "../../../supabase"; 
 
 interface LiveCategory {
@@ -11,6 +11,23 @@ interface LiveCategory {
   image: string;
 }
 
+// --- SMART IMAGE DICTIONARY ---
+// Automatically assigns a premium thumbnail if no product images exist yet
+const DEFAULT_THUMBNAILS: Record<string, string> = {
+  'rings': 'https://images.unsplash.com/photo-1605100804763-247f66122c94?q=80&w=800&auto=format&fit=crop',
+  'ring': 'https://images.unsplash.com/photo-1605100804763-247f66122c94?q=80&w=800&auto=format&fit=crop',
+  'necklaces': 'https://images.unsplash.com/photo-1599643478514-4a73428e3626?q=80&w=800&auto=format&fit=crop',
+  'necklace': 'https://images.unsplash.com/photo-1599643478514-4a73428e3626?q=80&w=800&auto=format&fit=crop',
+  'earrings': 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=800&auto=format&fit=crop',
+  'earring': 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=800&auto=format&fit=crop',
+  'bracelets': 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=800&auto=format&fit=crop',
+  'bracelet': 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=800&auto=format&fit=crop',
+  'pendants': 'https://images.unsplash.com/photo-1602751584552-8ba73aad10ee?q=80&w=800&auto=format&fit=crop',
+  'pendant': 'https://images.unsplash.com/photo-1602751584552-8ba73aad10ee?q=80&w=800&auto=format&fit=crop',
+  'mangalsutras': 'https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=800&auto=format&fit=crop',
+  'default': 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=800&auto=format&fit=crop'
+};
+
 const CategoryShowcase = () => {
   const [categories, setCategories] = useState<LiveCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,27 +36,32 @@ const CategoryShowcase = () => {
   useEffect(() => {
     async function fetchLiveCategories() {
       try {
-        // Fetch ALL categories, ignoring the is_visible toggle
         const { data, error } = await supabase
           .from('categories')
-          .select('id, name, slug, is_visible, products ( image_url )')
+          // FIXED: Removed image_url from here so Supabase doesn't crash!
+          .select('id, name, slug, is_visible, products ( image_url )') 
+          .eq('is_visible', true) 
           .order('name', { ascending: true });
 
         if (error) throw error;
 
         if (data && data.length > 0) {
           const formattedCategories: LiveCategory[] = data.map((cat: any) => {
-            let coverImage = cat.products?.[0]?.image_url || "https://placehold.co/400x600/f8f8f8/999999?text=Collection";
+            
+            const cleanSlug = cat.slug.toLowerCase().trim();
+            const smartFallback = DEFAULT_THUMBNAILS[cleanSlug] || DEFAULT_THUMBNAILS['default'];
+            
+            // Priority: 1. First Product's Image -> 2. Smart Dictionary Image
+            let coverImage = cat.products?.[0]?.image_url || smartFallback;
+            
             return { id: cat.id, name: cat.name, slug: cat.slug, image: coverImage };
           });
           setCategories(formattedCategories);
         } else {
-          // Fallback to empty array instead of deleted static data
           setCategories([]);
         }
       } catch (error) {
         console.error("Error fetching categories:", error);
-        // Fallback to empty array instead of deleted static data
         setCategories([]);
       } finally {
         setLoading(false);
@@ -51,7 +73,6 @@ const CategoryShowcase = () => {
   const scroll = (direction: "left" | "right") => {
     if (scrollRef.current) {
       const { scrollLeft, clientWidth } = scrollRef.current;
-      // Scroll by roughly 2 cards at a time
       const scrollAmount = clientWidth * 0.75; 
       const scrollTo = direction === "left" ? scrollLeft - scrollAmount : scrollLeft + scrollAmount;
       scrollRef.current.scrollTo({ left: scrollTo, behavior: "smooth" });
@@ -59,67 +80,70 @@ const CategoryShowcase = () => {
   };
 
   return (
-    <section className="py-12 md:py-20 bg-white overflow-hidden">
-      <div className="container mx-auto px-6">
+    <section className="py-12 md:py-20 bg-white overflow-hidden border-b border-stone-100 relative">
+      <div className="container mx-auto px-4 md:px-8">
         
-        {/* Header - Simple & Clean */}
-        <div className="text-center mb-10 md:mb-14">
-          <motion.span
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            className="text-[10px] font-bold tracking-[0.3em] text-rose-500 uppercase mb-2 block"
-          >
-            Our Collections
-          </motion.span>
+        {/* Header - Perfectly Centered */}
+        <div className="text-center mb-8 md:mb-12">
           <motion.h2
             initial={{ opacity: 0, y: 10 }}
             whileInView={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="font-serif text-2xl md:text-4xl text-gray-900 tracking-tight"
+            className="font-serif text-2xl md:text-4xl text-stone-900 tracking-tight"
           >
             Shop by Category
           </motion.h2>
+          <motion.div 
+            initial={{ opacity: 0, scaleX: 0 }}
+            whileInView={{ opacity: 1, scaleX: 1 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="h-px w-16 bg-rose-300 mx-auto mt-4"
+          ></motion.div>
         </div>
 
         <div className="relative group">
-          {/* --- Navigation Arrows - Positioned over the cards --- */}
+          {/* --- Navigation Arrows (Desktop) --- */}
           <button 
             onClick={() => scroll("left")}
-            className="absolute left-0 top-1/2 -translate-y-1/2 -ml-4 z-20 p-2 bg-white/80 backdrop-blur-md border border-stone-200 rounded-full shadow-lg text-stone-800 hover:bg-stone-900 hover:text-white transition-all duration-300 opacity-0 group-hover:opacity-100 hidden md:flex cursor-pointer"
+            className="absolute left-0 top-[40%] -translate-y-1/2 -ml-3 md:-ml-6 z-20 w-10 h-10 md:w-12 md:h-12 flex items-center justify-center bg-white/90 backdrop-blur-md border border-stone-200 rounded-full shadow-lg text-stone-600 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all duration-300 opacity-0 group-hover:opacity-100 hidden md:flex cursor-pointer"
             aria-label="Scroll Left"
           >
-            <ChevronLeft size={24} />
+            <ChevronLeft size={24} strokeWidth={1.5} />
           </button>
 
           <button 
             onClick={() => scroll("right")}
-            className="absolute right-0 top-1/2 -translate-y-1/2 -mr-4 z-20 p-2 bg-white/80 backdrop-blur-md border border-stone-200 rounded-full shadow-lg text-stone-800 hover:bg-stone-900 hover:text-white transition-all duration-300 opacity-0 group-hover:opacity-100 hidden md:flex cursor-pointer"
+            className="absolute right-0 top-[40%] -translate-y-1/2 -mr-3 md:-mr-6 z-20 w-10 h-10 md:w-12 md:h-12 flex items-center justify-center bg-white/90 backdrop-blur-md border border-stone-200 rounded-full shadow-lg text-stone-600 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all duration-300 opacity-0 group-hover:opacity-100 hidden md:flex cursor-pointer"
             aria-label="Scroll Right"
           >
-            <ChevronRight size={24} />
+            <ChevronRight size={24} strokeWidth={1.5} />
           </button>
 
           {/* --- Slider Container --- */}
           {loading ? (
-            <div className="flex gap-6 overflow-hidden">
-               {[1, 2, 3, 4, 5].map(i => (
-                  <div key={i} className="min-w-[220px] md:min-w-[260px] aspect-[3/4] bg-gray-50 animate-pulse rounded-sm"></div>
-                ))}
+            <div className="flex gap-4 md:gap-6 overflow-hidden">
+               {[1, 2, 3, 4].map(i => (
+                 <div key={i} className="min-w-[160px] md:min-w-[240px] lg:min-w-[280px] flex flex-col gap-4">
+                   <div className="aspect-[4/5] bg-stone-100 animate-pulse rounded-xl"></div>
+                   <div className="h-5 w-1/2 bg-stone-100 animate-pulse rounded mx-auto"></div>
+                 </div>
+               ))}
             </div>
           ) : categories.length > 0 ? (
             <div 
               ref={scrollRef}
-              className="flex gap-5 md:gap-7 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-6"
+              className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-6 pt-2"
             >
               {categories.map((cat) => (
                 <motion.div
                   key={cat.id}
-                  className="flex-shrink-0 w-[220px] md:w-[260px] lg:w-[280px] snap-start"
+                  className="flex-shrink-0 w-[160px] sm:w-[180px] md:w-[240px] lg:w-[280px] snap-start"
                 >
                   <Link to={`/category/${cat.slug}`} className="group flex flex-col w-full">
                     
-                    {/* Compact Image Card */}
-                    <div className="relative aspect-[3/4] overflow-hidden rounded-sm bg-gray-50 mb-5 border border-stone-100 shadow-sm transition-all duration-500 group-hover:shadow-xl">
+                    {/* Card Container */}
+                    <div className="relative w-full aspect-[4/5] overflow-hidden rounded-xl bg-stone-50 shadow-sm border border-stone-100">
+                      
+                      {/* Thumbnail Image with Gentle Zoom */}
                       <img
                         src={cat.image}
                         alt={cat.name}
@@ -127,24 +151,23 @@ const CategoryShowcase = () => {
                         loading="lazy"
                       />
                       
-                      {/* Hover Overlay */}
-                      <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                      
-                      <div className="absolute inset-x-0 bottom-4 px-4 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-500 flex justify-center">
-                        <div className="bg-white/95 backdrop-blur-sm text-gray-900 px-4 py-2.5 text-[9px] font-bold uppercase tracking-widest shadow-md flex items-center gap-2 hover:bg-rose-600 hover:text-white transition-colors w-full justify-center">
-                          Explore <ArrowRight size={12} />
+                      {/* Bottom Shadow Overlay */}
+                      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/40 to-transparent transition-opacity duration-500 opacity-60 md:opacity-0 md:group-hover:opacity-80"></div>
+
+                      {/* --- NEUTRAL 'VIEW COLLECTION' BUTTON --- */}
+                      <div className="absolute bottom-3 md:bottom-5 inset-x-3 md:inset-x-5 transition-all duration-500 ease-out opacity-100 md:opacity-0 md:translate-y-4 md:group-hover:opacity-100 md:group-hover:translate-y-0 z-10">
+                        <div className="w-full bg-white/95 backdrop-blur-sm text-stone-900 px-2 py-2.5 md:py-3 text-[9px] md:text-xs font-bold uppercase tracking-[0.15em] rounded shadow-md border border-white/50 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-colors duration-300 text-center">
+                          View Collection
                         </div>
                       </div>
+
                     </div>
 
-                    {/* Minimal Category Title */}
-                    <div className="text-center px-2">
-                      <h3 className="font-serif text-lg md:text-xl text-gray-900 group-hover:text-rose-600 transition-colors duration-300 truncate">
+                    {/* Simple Category Name Below */}
+                    <div className="mt-4 text-center px-1">
+                      <h3 className="font-serif text-lg md:text-xl text-stone-900 group-hover:text-rose-600 transition-colors duration-300">
                         {cat.name}
                       </h3>
-                      <div className="mt-3 flex justify-center opacity-40 group-hover:opacity-100 transition-opacity">
-                        <span className="h-[1px] w-6 bg-stone-300 group-hover:w-12 group-hover:bg-rose-400 transition-all duration-500"></span>
-                      </div>
                     </div>
 
                   </Link>
@@ -152,7 +175,7 @@ const CategoryShowcase = () => {
               ))}
             </div>
           ) : (
-            <div className="text-center py-10 text-gray-500">
+            <div className="text-center py-12 text-stone-500">
               No categories found.
             </div>
           )}
