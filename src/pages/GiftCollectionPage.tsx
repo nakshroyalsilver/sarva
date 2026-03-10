@@ -21,12 +21,14 @@ const GiftCollectionPage = () => {
         .from("products")
         .select("*")
         .eq("is_new_arrival", true)
+        .eq("is_archived", false) // 🚀 ADDED: Keep archived items out of new arrivals
         .limit(10);
 
       // 2. Get a pool of random items from the database to mix in
       const { data: randomData } = await supabase
         .from("products")
         .select("*")
+        .eq("is_archived", false) // 🚀 ADDED: Keep archived items out of the random pool
         .limit(40);
 
       // 3. Combine both lists

@@ -7,8 +7,8 @@ import Footer from "@/components/layout/Footer";
 import ProductCard from "@/components/ProductCard"; 
 import { Helmet } from "react-helmet-async";
 import { supabase } from "../../supabase"; 
-import { useQuery } from "@tanstack/react-query"; // <-- ADDED TANSTACK QUERY
-import { analytics } from "@/lib/analytics"; // <-- NEW: Analytics Import
+import { useQuery } from "@tanstack/react-query"; 
+import { analytics } from "@/lib/analytics"; 
 
 const SearchResultsPage = () => {
   const [searchParams] = useSearchParams();
@@ -25,7 +25,8 @@ const SearchResultsPage = () => {
       const { data, error } = await supabase
         .from('products')
         .select('*, categories(name, slug)')
-        .ilike('title', `%${query}%`); 
+        .ilike('title', `%${query}%`)
+        .eq('is_archived', false); // 🚀 ADDED: Hides archived products from search results
 
       if (error) throw error;
 

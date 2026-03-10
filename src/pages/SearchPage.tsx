@@ -5,7 +5,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { Helmet } from "react-helmet-async";
 import { supabase } from "../../supabase"; 
-import { useQuery } from "@tanstack/react-query"; // <-- ADDED TANSTACK QUERY
+import { useQuery } from "@tanstack/react-query"; 
 
 const SearchPage = () => {
   const navigate = useNavigate();
@@ -23,6 +23,7 @@ const SearchPage = () => {
       const { data: prodData } = await supabase
         .from('products')
         .select('id, title, price, image_url, image_urls')
+        .eq('is_archived', false) // 🚀 ADDED: Prevents archived items from showing in trending/suggestions
         .order('created_at', { ascending: false })
         .limit(10);
 

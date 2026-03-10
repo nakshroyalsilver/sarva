@@ -13,7 +13,9 @@ import { analytics } from "../lib/analytics";
 const CheckoutPage = () => {
   const { state } = useLocation();
   const navigate = useNavigate();
-  const { cartItems } = useCart();
+  
+  // 🚀 INJECTED removeFromCart & clearCart to handle safe cleanups
+  const { cartItems, clearCart, removeFromCart } = useCart();
   
   // --- PERSISTENT CHECKOUT DRAFT LOGIC ---
   const [activeStep, setActiveStep] = useState(() => {
@@ -225,7 +227,6 @@ const CheckoutPage = () => {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          // ADDED HEADERS TO PREVENT OPENSTREETMAP BLOCKING
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`, {
             headers: {
               'User-Agent': 'SarvaaJewelryStore/1.0'
@@ -328,7 +329,7 @@ const CheckoutPage = () => {
         return; 
       }
 
-      // Keep this frontend pre-check to fail fast without hitting the database unneccessarily
+      // 🚀 THE FINAL GATEKEEPER FIX
       for (const item of checkoutItems) {
         const { data: stockCheck, error: stockError } = await supabase
           .from('products')
@@ -337,8 +338,14 @@ const CheckoutPage = () => {
           .single();
 
         if (stockError || !stockCheck || stockCheck.stock_quantity < item.qty) {
-          alert(`Oh no! Another customer just bought the last "${item.title || item.name}". It is now out of stock. Please remove it from your cart to continue.`);
+          alert(`Oh no! Another customer just bought the last "${item.title || item.name}". It is now out of stock.`);
           setIsProcessing(false);
+          
+          // Auto-remove the item from their cart so they aren't stuck with it
+          removeFromCart(item.id);
+          
+          // Redirect them safely back to the cart to review
+          navigate('/cart');
           return; 
         }
       }
@@ -378,13 +385,22 @@ const CheckoutPage = () => {
       }
       // ========================================================
 
-      // --- NEW: TRACK SUCCESSFUL PURCHASE FOR GOOGLE ANALYTICS ---
+      // --- TRACK SUCCESSFUL PURCHASE FOR GOOGLE ANALYTICS ---
       analytics.trackWhatsAppOrder(newOrderId, total);
 
-      // CLEAR THE CART AND CHECKOUT DRAFT ON SUCCESS
-      if (!state?.directPurchase) {
-        localStorage.removeItem("sarvaa_cart"); 
+      // 🚀 THE SILENT CLEANUP FIX
+      if (state?.directPurchase) {
+        // If they used "Buy Now", see if it was lingering in their cart
+        const itemWasInCart = cartItems.find((item: any) => item.id === state.directPurchase.id);
+        if (itemWasInCart) {
+          removeFromCart(state.directPurchase.id); // Safely remove it!
+        }
+      } else {
+        // If it was a normal cart checkout, clear the cart properly
+        clearCart();
       }
+
+      // Cleanup local drafts
       localStorage.removeItem("checkout_contact");
       localStorage.removeItem("checkout_shipping"); 
       localStorage.removeItem("checkout_billing");
@@ -488,8 +504,6 @@ Please let me know how to proceed with the payment. Thank you!`;
       setWhatsappLink(generatedLink);
       
       setOrderSuccess(true);
-      // REMOVED window.open setTimeout here to prevent browser blocking. 
-      // User will now click the button in the success modal.
 
     } catch (error: any) {
       console.error("Order error:", error);

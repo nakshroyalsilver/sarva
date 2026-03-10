@@ -8,7 +8,8 @@ import ProductCard from "@/components/ProductCard";
 import { supabase } from "../../supabase";
 import { Helmet } from "react-helmet-async"; 
 import { useQuery } from "@tanstack/react-query"; 
-import { analytics } from "@/lib/analytics"; // <-- NEW: Analytics Import
+import { analytics } from "@/lib/analytics"; 
+import { formatProductList } from "@/lib/formatters"; // 🚀 NEW: Clean Formatter
 
 const PRICE_RANGES = ["Under ₹1000", "₹1000 - ₹2500", "₹2500 - ₹5000", "Above ₹5000"];
 const MATERIAL_OPTIONS = ["925 Sterling Silver", "Rose Gold Plated", "Oxidized Silver", "Gold Plated"];
@@ -30,7 +31,13 @@ const CategoryPage = () => {
     queryKey: ['catalog', slug], 
     queryFn: async () => {
       let title = 'All Collections';
-      let query = supabase.from('products').select('*, categories(name, slug)').order('created_at', { ascending: false });
+      
+      // 🚀 CHANGED: Added .eq('is_archived', false) to hide archived products
+      let query = supabase
+        .from('products')
+        .select('*, categories(name, slug)')
+        .eq('is_archived', false) 
+        .order('created_at', { ascending: false });
 
       if (slug === 'new') {
         title = 'New Arrivals';
@@ -46,14 +53,8 @@ const CategoryPage = () => {
       const { data: prodData, error } = await query;
       if (error) throw error;
 
-      const formattedProducts = prodData ? prodData.map((p: any) => ({
-        ...p,
-        name: p.title, 
-        image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
-        price: p.price || 0, 
-        category: p.categories?.name || 'Uncategorized',
-        stock_quantity: Number(p.stock_quantity || 0) // Explicitly parse stock for sorting
-      })) : [];
+      // 🚀 CHANGED: Cleaned up mapping using your centralized formatter
+      const formattedProducts = prodData ? formatProductList(prodData) : [];
 
       return { categoryName: title, products: formattedProducts };
     },
@@ -109,9 +110,9 @@ const CategoryPage = () => {
 
     // --- SMART SORTING LOGIC ---
     result.sort((a, b) => {
-      // Step 1: ALWAYS Push Out of Stock items to the bottom
-      const aInStock = a.stock_quantity > 0 ? 1 : 0;
-      const bInStock = b.stock_quantity > 0 ? 1 : 0;
+      // 🚀 CHANGED: Using the safe camelCase `stockQuantity` provided by the Formatter
+      const aInStock = a.stockQuantity > 0 ? 1 : 0;
+      const bInStock = b.stockQuantity > 0 ? 1 : 0;
       
       if (aInStock !== bInStock) {
         return bInStock - aInStock; // In-stock items (1) come before OOS items (0)
@@ -174,10 +175,6 @@ const CategoryPage = () => {
           
           {/* --- BEAUTIFIED ROSE RED TINTED HERO BANNER --- */}
           <div className="relative rounded-2xl overflow-hidden bg-rose-100 min-h-[180px] md:min-h-[220px] flex items-center shadow-sm border border-rose-200">
-            
-           
-           
-
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}

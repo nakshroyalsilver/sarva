@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Trash2, Minus, Plus, ShieldCheck, ArrowRight, Gift, Star, ShoppingBag, ChevronDown, Tag } from "lucide-react";
+import { Trash2, Minus, Plus, ShieldCheck, ArrowRight, Gift, Star, ShoppingBag, ChevronDown, Tag, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/context/CartContext"; 
 import { supabase } from "../../supabase"; 
 import { Helmet } from "react-helmet-async";
-import { analytics } from "@/lib/analytics"; // <-- NEW: Analytics Import
+import { analytics } from "@/lib/analytics"; 
 
 const CartPage = () => {
   const navigate = useNavigate(); 
@@ -16,27 +16,54 @@ const CartPage = () => {
   const [isGiftOpen, setIsGiftOpen] = useState(false);
   const [giftMessage, setGiftMessage] = useState("");
   
-  // Dynamic Products from Backend
   const [suggestedProducts, setSuggestedProducts] = useState<any[]>([]);
+  
+  const [liveCartStatus, setLiveCartStatus] = useState<Record<string, any>>({});
 
+  
   // Fetch real products from Supabase for "More to Love"
   useEffect(() => {
     const fetchSuggestions = async () => {
       const { data, error } = await supabase
         .from('products')
         .select('*')
+        .eq('is_archived', false)
         .limit(8); 
         
       if (!error && data) {
-        // ADDED TYPES HERE: (p: any) and (c: any)
-        const filtered = data.filter((p: any) => !cartItems.find((c: any) => c.id === p.id)).slice(0, 4);
-        setSuggestedProducts(filtered);
+        // Define what the raw data from Supabase looks like
+        interface RawSupabaseProduct {
+          id: string;
+          title?: string;
+          name?: string;
+          price?: number;
+          image_url?: string;
+          image_urls?: string[];
+          [key: string]: unknown;
+        }
+
+        // 1. Filter out items already in the cart
+        const filtered = data
+          .filter((p: RawSupabaseProduct) => !cartItems.find((c: any) => c.id === p.id))
+          .slice(0, 4);
+        
+        // 🚀 2. FIX: Format the data so 'name' and 'image' match what the CartContext expects!
+        const formatted = filtered.map((p: RawSupabaseProduct) => ({
+          ...p,
+          name: p.title || p.name || 'Premium Jewelry Piece',
+          image: (p.image_urls && p.image_urls.length > 0) 
+            ? p.image_urls[0] 
+            : p.image_url || 'https://via.placeholder.com/800'
+        }));
+
+        setSuggestedProducts(formatted);
       }
     };
     fetchSuggestions();
   }, [cartItems]);
+  
 
-  // --- STRICT CART MATH LOGIC (ADDED TYPES) ---
+  // --- STRICT CART MATH LOGIC ---
   const subtotal = cartItems.reduce((acc: number, item: any) => acc + (Number(item.price) * Number(item.qty)), 0);
   
   // Shipping: Free above ₹5000
@@ -45,12 +72,20 @@ const CartPage = () => {
   
   const total = subtotal + shipping;
 
-  // --- NEW: Track Cart View for Google Analytics ---
+  // Track Cart View for Google Analytics
   useEffect(() => {
     if (cartItems.length > 0) {
       analytics.trackViewCart(total, cartItems);
     }
-  }, [cartItems.length]); // Only re-fires if the number of distinct items in the cart changes
+  }, [cartItems.length, total]); // Added total to dependency array for accuracy
+
+  // 🚀 SMART CHECKOUT VALIDATION
+  // Prevents user from going to checkout if they are holding an archived or out-of-stock item
+  const hasUnavailableItems = cartItems.some((item: any) => {
+    const liveData = liveCartStatus[item.id];
+    if (!liveData) return false; // Assume fine until loaded
+    return liveData.is_archived || liveData.stock_quantity < item.qty;
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F9F9F9] font-sans">
@@ -61,8 +96,8 @@ const CartPage = () => {
       </Helmet>
 
       <Navbar />
-       
-      <main className="flex-grow container mx-auto px-4 py-8 lg:py-12">
+        
+      <main className="flex-grow container mx-auto px-4 py-8 lg:py-12 max-w-6xl">
         <h1 className="font-serif text-2xl md:text-3xl text-gray-900 mb-8">Shopping Cart ({cartItems.length})</h1>
 
         {cartItems.length > 0 ? (
@@ -71,46 +106,95 @@ const CartPage = () => {
             {/* LEFT COLUMN: ITEMS */}
             <div className="lg:w-2/3 space-y-8">
               <div className="space-y-4">
-                {/* ADDED TYPE HERE: (item: any) */}
-                {cartItems.map((item: any) => (
-                  <div key={`${item.id}-${item.size}`} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex gap-4 md:gap-6 transition-shadow hover:shadow-md">
-                    <Link to={`/product/${item.id}`} className="w-24 h-24 md:w-32 md:h-32 bg-gray-50 rounded-lg overflow-hidden flex-shrink-0 relative group">
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                    </Link>
-                    
-                    <div className="flex-1 flex flex-col justify-between">
-                      <div>
-                        <div className="flex justify-between items-start">
-                          <Link to={`/product/${item.id}`}>
-                             <h3 className="font-medium text-gray-900 text-sm md:text-base hover:text-rose-600 transition-colors line-clamp-2">{item.name}</h3>
-                          </Link>
-                          <button onClick={() => removeFromCart(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1 -mt-1 -mr-1 cursor-pointer">
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1 capitalize">Category: {item.category} {item.size ? `• Size: ${item.size}` : ''}</p>
-                      </div>
+                {cartItems.map((item: any) => {
+                  // 🚀 LIVE STATUS CALCULATIONS
+                  const liveData = liveCartStatus[item.id];
+                  const isArchived = liveData?.is_archived === true;
+                  const isOutOfStock = liveData && liveData.stock_quantity < 1;
+                  const notEnoughStock = liveData && liveData.stock_quantity > 0 && liveData.stock_quantity < item.qty;
+                  
+                  const isUnavailable = isArchived || isOutOfStock;
 
-                      <div className="flex items-end justify-between mt-4">
-                        <div className="flex items-center border border-gray-200 rounded-md bg-white">
-                          <button onClick={() => updateQty(item.id, -1)} className="p-1.5 hover:bg-gray-50 text-gray-600 rounded-l-md cursor-pointer"><Minus size={14} /></button>
-                          <span className="w-8 text-center text-xs font-semibold">{item.qty}</span>
-                          <button onClick={() => updateQty(item.id, 1)} className="p-1.5 hover:bg-gray-50 text-gray-600 rounded-r-md cursor-pointer"><Plus size={14} /></button>
+                  return (
+                    <div key={`${item.id}-${item.size}`} className={`bg-white p-4 rounded-xl shadow-sm border ${isUnavailable ? 'border-red-100 bg-red-50/20' : 'border-gray-100'} flex gap-4 md:gap-6 transition-shadow hover:shadow-md`}>
+                      <Link to={`/product/${item.id}`} className="w-24 h-24 md:w-32 md:h-32 bg-gray-50 rounded-lg overflow-hidden flex-shrink-0 relative group">
+                        <img 
+                          src={item.image} 
+                          alt={item.name} 
+                          className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${isUnavailable ? 'grayscale opacity-60' : ''}`} 
+                        />
+                      </Link>
+                      
+                      <div className="flex-1 flex flex-col justify-between relative">
+                        <div>
+                          <div className="flex justify-between items-start">
+                            <Link to={`/product/${item.id}`}>
+                               <h3 className={`font-medium text-sm md:text-base hover:text-rose-600 transition-colors line-clamp-2 pr-6 ${isUnavailable ? 'text-gray-500' : 'text-gray-900'}`}>
+                                 {item.name}
+                               </h3>
+                            </Link>
+                            <button onClick={() => removeFromCart(item.id)} className="text-gray-400 hover:text-red-500 transition-colors p-1 -mt-1 -mr-1 cursor-pointer absolute right-0 top-0 bg-white/80 rounded-full">
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1 capitalize">Category: {item.category} {item.size ? `• Size: ${item.size}` : ''}</p>
+                          
+                          {/* 🚀 SMART BADGES FOR ARCHIVED/OOS */}
+                          {(isArchived || isOutOfStock) && (
+                            <div className="mt-2">
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded uppercase tracking-wider">
+                                {isArchived ? 'Unavailable' : 'Out of Stock'}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {notEnoughStock && (
+                            <div className="mt-2">
+                              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded uppercase tracking-wider flex items-center inline-flex gap-1">
+                                <AlertCircle size={10} /> Only {liveData.stock_quantity} left in stock
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-right">
-                           <span className="block font-bold text-gray-900">₹{(item.price * item.qty).toLocaleString()}</span>
+
+                        <div className="flex items-end justify-between mt-4">
+                          {!isUnavailable ? (
+                            <div className="flex items-center border border-gray-200 rounded-md bg-white">
+                              <button onClick={() => updateQty(item.id, -1)} className="p-1.5 hover:bg-gray-50 text-gray-600 rounded-l-md cursor-pointer"><Minus size={14} /></button>
+                              <span className="w-8 text-center text-xs font-semibold">{item.qty}</span>
+                              <button 
+                                onClick={() => {
+                                  if (liveData && item.qty >= liveData.stock_quantity) {
+                                    alert(`Maximum stock reached. Only ${liveData.stock_quantity} available.`);
+                                  } else {
+                                    updateQty(item.id, 1);
+                                  }
+                                }} 
+                                className={`p-1.5 rounded-r-md transition-colors ${liveData && item.qty >= liveData.stock_quantity ? 'text-gray-300 cursor-not-allowed' : 'hover:bg-gray-50 text-gray-600 cursor-pointer'}`}
+                              >
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Please Remove</span>
+                          )}
+                          
+                          <div className="text-right">
+                             <span className={`block font-bold ${isUnavailable ? 'text-gray-400' : 'text-gray-900'}`}>
+                               ₹{(item.price * item.qty).toLocaleString()}
+                             </span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {/* DYNAMIC MORE TO LOVE SECTION */}
               <div className="pt-8 border-t border-gray-200">
                 <h2 className="font-serif text-xl text-gray-900 mb-6">More to Love</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {/* ADDED TYPE HERE: (p: any) */}
                   {suggestedProducts.map((p: any) => (
                     <div key={p.id} className="bg-white rounded-lg border border-gray-100 overflow-hidden group hover:shadow-lg transition-all duration-300 flex flex-col h-full">
                       <Link to={`/product/${p.id}`} className="relative aspect-square bg-gray-50 overflow-hidden block">
@@ -199,9 +283,23 @@ const CartPage = () => {
                   <span className="font-bold text-gray-900 text-xl">₹{total.toLocaleString()}</span>
                 </div>
 
-                {/* CHECKOUT BUTTON */}
-                <button onClick={() => navigate('/checkout')} className="w-full bg-rose-600 text-white py-4 rounded-lg font-bold uppercase tracking-widest text-sm hover:bg-rose-700 transition-colors shadow-lg shadow-rose-200 flex items-center justify-center gap-2 cursor-pointer">
-                  Checkout <ArrowRight size={16} />
+                {/* 🚀 CHECKOUT BUTTON: Blocks if an item is archived or OOS */}
+                {hasUnavailableItems && (
+                  <div className="mb-3 text-[11px] text-red-600 bg-red-50 p-2 rounded border border-red-100 text-center font-medium">
+                    Please remove unavailable items to proceed to checkout.
+                  </div>
+                )}
+                
+                <button 
+                  onClick={() => navigate('/checkout')} 
+                  disabled={hasUnavailableItems}
+                  className={`w-full py-4 rounded-lg font-bold uppercase tracking-widest text-sm flex items-center justify-center gap-2 transition-all ${
+                    hasUnavailableItems 
+                      ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
+                      : 'bg-rose-600 text-white hover:bg-rose-700 shadow-lg shadow-rose-200 cursor-pointer'
+                  }`}
+                >
+                  {hasUnavailableItems ? 'Review Cart Items' : <>Checkout <ArrowRight size={16} /></>}
                 </button>
 
                 <div className="mt-6 grid grid-cols-2 gap-2">
@@ -211,7 +309,7 @@ const CartPage = () => {
                   </div>
                   <div className="flex items-center justify-center gap-1.5 text-[10px] text-gray-500 bg-gray-50 py-2 rounded border border-gray-100">
                     <Star size={12} className="text-amber-500 fill-amber-500" />
-                    <span>4.8/5 Rated</span>
+                    <span>Secured Shipping</span>
                   </div>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight,ArrowRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { supabase } from "../../../supabase"; // Adjust path if needed
@@ -7,7 +7,7 @@ import { supabase } from "../../../supabase"; // Adjust path if needed
 const StylingCarousel = () => {
   const [stylingContent, setStylingContent] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(0);
 
@@ -19,6 +19,7 @@ const StylingCarousel = () => {
           .from("products")
           .select("*, categories(name)")
           .eq("is_featured", true) // Only get products toggled ON in Admin
+          .eq("is_archived", false) // Ensures archived products NEVER show up here
           .order("created_at", { ascending: false })
           .limit(6); // Limit to top 6 to keep the carousel snappy
 
@@ -27,7 +28,7 @@ const StylingCarousel = () => {
         if (data && data.length > 0) {
           const formatted = data.map(p => ({
             id: p.id,
-            title: p.categories?.name ? `${p.categories.name} Edit` : "Featured Style",
+            title: p.categories?.name ? p.categories.name : "Featured Style",
             description: p.short_description || "Discover the craftsmanship of this featured piece.",
             media: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
             productName: p.title,
@@ -46,7 +47,7 @@ const StylingCarousel = () => {
   // 2. Auto-scroll effect (only runs if we have content)
   useEffect(() => {
     if (stylingContent.length <= 1) return;
-    
+
     const timer = setInterval(() => {
       setDirection(1);
       setCurrentIndex((prev) => (prev + 1) % stylingContent.length);
@@ -111,8 +112,8 @@ const StylingCarousel = () => {
           </h2>
         </div>
 
-        {/* Carousel Container */}
-        <div className="relative h-[500px] md:h-[600px] flex items-center justify-center perspective-1000">
+        {/* Carousel Container - Height slightly reduced */}
+        <div className="relative h-[450px] md:h-[550px] flex items-center justify-center perspective-1000">
 
           {/* Navigation Buttons (Hide if only 1 item) */}
           {stylingContent.length > 1 && (
@@ -162,11 +163,13 @@ const StylingCarousel = () => {
                     paginate(-1);
                   }
                 }}
-                className="absolute w-full max-w-2xl cursor-grab active:cursor-grabbing"
+                // Reduced width from max-w-2xl to max-w-xl
+                className="absolute w-full max-w-xl cursor-grab active:cursor-grabbing px-4 md:px-0"
               >
                 {/* Main Card */}
                 <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-white border border-stone-200/50">
-                  <div className="relative h-[400px] md:h-[500px]">
+                  {/* Reduced inner height from 400/500 to 350/450 */}
+                  <div className="relative h-[350px] md:h-[450px]">
                     <img
                       src={stylingContent[currentIndex].media}
                       alt={stylingContent[currentIndex].title}
@@ -181,14 +184,14 @@ const StylingCarousel = () => {
                       <h3 className="font-serif text-3xl md:text-4xl mb-2 capitalize">
                         {stylingContent[currentIndex].title}
                       </h3>
-                      <p className="text-sm md:text-base text-white/80 mb-6 max-w-md font-light">
+                      <p className="text-sm md:text-base text-white/80 mb-6 max-w-md font-light line-clamp-2">
                         {stylingContent[currentIndex].description}
                       </p>
 
                       {/* Dynamic Product Tag Link */}
                       <Link to={`/product/${stylingContent[currentIndex].id}`} className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-full pr-6 pl-2 py-2 border border-white/20 hover:bg-white/20 transition-colors group">
                         <div className="w-10 h-10 rounded-full bg-white/10 overflow-hidden border border-white/20 shrink-0">
-                           <img src={stylingContent[currentIndex].media} className="w-full h-full object-cover" alt="thumbnail" />
+                          <img src={stylingContent[currentIndex].media} className="w-full h-full object-cover" alt="thumbnail" />
                         </div>
                         <div>
                           <p className="text-xs font-bold uppercase tracking-wider line-clamp-1">{stylingContent[currentIndex].productName}</p>
@@ -225,11 +228,10 @@ const StylingCarousel = () => {
                     setDirection(idx > currentIndex ? 1 : -1);
                     setCurrentIndex(idx);
                   }}
-                  className={`h-1.5 rounded-full transition-all cursor-pointer ${
-                    idx === currentIndex
+                  className={`h-1.5 rounded-full transition-all cursor-pointer ${idx === currentIndex
                       ? "bg-stone-800 w-8"
                       : "bg-stone-300 w-2 hover:bg-stone-400"
-                  }`}
+                    }`}
                   aria-label={`Go to slide ${idx + 1}`}
                 />
               ))}

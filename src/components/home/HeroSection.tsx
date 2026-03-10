@@ -75,8 +75,13 @@ const HeroSection = () => {
         >
           <img
             src={currentSlide.image_url}
-            alt={currentSlide.heading}
+            alt={currentSlide.heading || "Hero Image"}
             className="h-full w-full object-cover object-center"
+            // 🚀 ENTERPRISE LCP OPTIMIZATION: 
+            // Forces the browser to prioritize the first slide and lazy-load the rest in the background.
+            fetchPriority={current === 0 ? "high" : "auto"}
+            loading={current === 0 ? "eager" : "lazy"}
+            decoding={current === 0 ? "sync" : "async"}
           />
           {/* Only show overlay if there is text to read */}
           {(currentSlide.heading || currentSlide.subheading) && (

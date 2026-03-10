@@ -12,7 +12,6 @@ interface LiveCategory {
 }
 
 // --- SMART IMAGE DICTIONARY ---
-// Automatically assigns a premium thumbnail if no product images exist yet
 const DEFAULT_THUMBNAILS: Record<string, string> = {
   'rings': 'https://images.unsplash.com/photo-1605100804763-247f66122c94?q=80&w=800&auto=format&fit=crop',
   'ring': 'https://images.unsplash.com/photo-1605100804763-247f66122c94?q=80&w=800&auto=format&fit=crop',
@@ -38,20 +37,20 @@ const CategoryShowcase = () => {
       try {
         const { data, error } = await supabase
           .from('categories')
-          // FIXED: Removed image_url from here so Supabase doesn't crash!
-          .select('id, name, slug, is_visible, products ( image_url )') 
+          // 🚀 FIXED: Added nested filtering to ensure we ONLY grab images from non-archived products
+          .select('id, name, slug, is_visible, products!inner ( image_url, is_archived )') 
           .eq('is_visible', true) 
+          .eq('products.is_archived', false) // 🚀 This tells Supabase to ignore archived product images
           .order('name', { ascending: true });
 
         if (error) throw error;
 
         if (data && data.length > 0) {
           const formattedCategories: LiveCategory[] = data.map((cat: any) => {
-            
             const cleanSlug = cat.slug.toLowerCase().trim();
             const smartFallback = DEFAULT_THUMBNAILS[cleanSlug] || DEFAULT_THUMBNAILS['default'];
             
-            // Priority: 1. First Product's Image -> 2. Smart Dictionary Image
+            // Priority: 1. First Non-Archived Product's Image -> 2. Smart Dictionary Image
             let coverImage = cat.products?.[0]?.image_url || smartFallback;
             
             return { id: cat.id, name: cat.name, slug: cat.slug, image: coverImage };
@@ -80,10 +79,9 @@ const CategoryShowcase = () => {
   };
 
   return (
-    <section className="py-12 md:py-20 bg-white overflow-hidden border-b border-stone-100 relative">
+    <section className="pt-12 pb-6 md:pt-20 md:pb-8 bg-white overflow-hidden border-b border-stone-100 relative">
       <div className="container mx-auto px-4 md:px-8">
         
-        {/* Header - Perfectly Centered */}
         <div className="text-center mb-8 md:mb-12">
           <motion.h2
             initial={{ opacity: 0, y: 10 }}
@@ -101,7 +99,6 @@ const CategoryShowcase = () => {
         </div>
 
         <div className="relative group">
-          {/* --- Navigation Arrows (Desktop) --- */}
           <button 
             onClick={() => scroll("left")}
             className="absolute left-0 top-[40%] -translate-y-1/2 -ml-3 md:-ml-6 z-20 w-10 h-10 md:w-12 md:h-12 flex items-center justify-center bg-white/90 backdrop-blur-md border border-stone-200 rounded-full shadow-lg text-stone-600 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all duration-300 opacity-0 group-hover:opacity-100 hidden md:flex cursor-pointer"
@@ -118,7 +115,6 @@ const CategoryShowcase = () => {
             <ChevronRight size={24} strokeWidth={1.5} />
           </button>
 
-          {/* --- Slider Container --- */}
           {loading ? (
             <div className="flex gap-4 md:gap-6 overflow-hidden">
                {[1, 2, 3, 4].map(i => (
@@ -131,7 +127,7 @@ const CategoryShowcase = () => {
           ) : categories.length > 0 ? (
             <div 
               ref={scrollRef}
-              className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-6 pt-2"
+              className="flex gap-4 md:gap-6 overflow-x-auto scrollbar-hide snap-x snap-mandatory pb-2 pt-2"
             >
               {categories.map((cat) => (
                 <motion.div
@@ -140,10 +136,7 @@ const CategoryShowcase = () => {
                 >
                   <Link to={`/category/${cat.slug}`} className="group flex flex-col w-full">
                     
-                    {/* Card Container */}
                     <div className="relative w-full aspect-[4/5] overflow-hidden rounded-xl bg-stone-50 shadow-sm border border-stone-100">
-                      
-                      {/* Thumbnail Image with Gentle Zoom */}
                       <img
                         src={cat.image}
                         alt={cat.name}
@@ -151,10 +144,8 @@ const CategoryShowcase = () => {
                         loading="lazy"
                       />
                       
-                      {/* Bottom Shadow Overlay */}
                       <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/40 to-transparent transition-opacity duration-500 opacity-60 md:opacity-0 md:group-hover:opacity-80"></div>
 
-                      {/* --- NEUTRAL 'VIEW COLLECTION' BUTTON --- */}
                       <div className="absolute bottom-3 md:bottom-5 inset-x-3 md:inset-x-5 transition-all duration-500 ease-out opacity-100 md:opacity-0 md:translate-y-4 md:group-hover:opacity-100 md:group-hover:translate-y-0 z-10">
                         <div className="w-full bg-white/95 backdrop-blur-sm text-stone-900 px-2 py-2.5 md:py-3 text-[9px] md:text-xs font-bold uppercase tracking-[0.15em] rounded shadow-md border border-white/50 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-colors duration-300 text-center">
                           View Collection
@@ -163,7 +154,6 @@ const CategoryShowcase = () => {
 
                     </div>
 
-                    {/* Simple Category Name Below */}
                     <div className="mt-4 text-center px-1">
                       <h3 className="font-serif text-lg md:text-xl text-stone-900 group-hover:text-rose-600 transition-colors duration-300">
                         {cat.name}

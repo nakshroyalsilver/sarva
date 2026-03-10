@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag, PlayCircle, Bell, Info } from "lucide-react";
+import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag, PlayCircle, Bell, Info, CreditCard, Sparkles } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/context/CartContext"; 
@@ -10,12 +10,13 @@ import ProductReviews from "@/components/home/ProductReviews";
 import { Helmet } from "react-helmet-async";
 import { useQuery } from "@tanstack/react-query";
 import AddToCartPopup from "../components/layout/AddToCartPopup";
-import { analytics } from "../lib/analytics"; // <-- NEW: Analytics import
+import { analytics } from "../lib/analytics"; 
+import { formatProduct, formatProductList } from "@/lib/formatters";
 
 // --- CUSTOM QUILL HTML STYLING ---
 const quillStyles = `
-  text-sm text-gray-600 leading-relaxed
-  [&_p]:mb-4 last:[&_p]:mb-0
+  text-sm text-gray-600 leading-relaxed break-words
+  [&_p]:mb-4 last:[&_p]:mb-0 [&_p]:break-words
   [&_strong]:!font-bold [&_strong]:!text-black [&_b]:!font-bold [&_b]:!text-black
   [&_em]:italic [&_i]:italic
   [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-4
@@ -68,38 +69,24 @@ const ProductDetailPage = () => {
         
       if (prodError || !prodData) throw new Error("Product not found");
 
-      const formattedProduct = {
-        ...prodData,
-        name: prodData.title,
-        image: (prodData.image_urls && prodData.image_urls.length > 0) ? prodData.image_urls[0] : prodData.image_url,
-        price: prodData.price || 0,
-        category: prodData.categories?.slug || 'uncategorized',
-        stock_quantity: (prodData.stock_quantity !== undefined && prodData.stock_quantity !== null) ? Number(prodData.stock_quantity) : 0, 
-        rating: 4.8, 
-        reviews: 124 
-      };
+      const cleanProduct = formatProduct(prodData);
 
-      let formattedSimilar: any[] = [];
+      let cleanSimilar: any[] = [];
       if (prodData.category_id) {
         const { data: simData } = await supabase
           .from('products')
           .select('*, categories(name, slug)')
           .eq('category_id', prodData.category_id)
           .neq('id', id)
+          .eq('is_archived', false) // 🚀 PREVENTS ARCHIVED ITEMS IN "YOU MAY ALSO LIKE"
           .limit(8);
           
         if (simData) {
-          formattedSimilar = simData.map((p: any) => ({
-            ...p,
-            name: p.title,
-            image: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
-            price: p.price || 0,
-            category: p.categories?.slug || 'uncategorized'
-          }));
+          cleanSimilar = formatProductList(simData);
         }
       }
 
-      return { product: formattedProduct, similarProducts: formattedSimilar };
+      return { product: cleanProduct, similarProducts: cleanSimilar };
     },
     enabled: !!id,
     staleTime: 1000 * 60 * 5,
@@ -122,7 +109,6 @@ const ProductDetailPage = () => {
   const product = pageData?.product;
   const similarProducts = pageData?.similarProducts || [];
 
-  // --- NEW: Track Product View for Google Analytics ---
   useEffect(() => {
     if (product) {
       analytics.trackProductView(product);
@@ -135,17 +121,17 @@ const ProductDetailPage = () => {
     setQuantity(1);
     setSelectedSize(null);
     setSizeError(false);
-    setIsZooming(false); // Reset zoom on load
+    setIsZooming(false); 
   }, [id]);
 
   const isWishlisted = product ? wishlistItems.some((item) => item.id === product.id) : false;
 
-  const images = product 
-    ? ((product.image_urls && product.image_urls.length > 0) ? product.image_urls : (product.image ? [product.image] : []))
-    : [];
-
-  const currentStock = product ? Number(product.stock_quantity) : 0;
-  const isOutOfStock = currentStock <= 0;
+  const images = product?.images || [];
+  const currentStock = product?.stockQuantity || 0;
+  
+  // 🚀 NEW: Check if archived, and treat archived items as permanently out-of-stock for safety
+  const isArchived = product?.is_archived === true;
+  const isOutOfStock = product?.isOutOfStock || isArchived;
 
   useEffect(() => {
     if (product?.id) {
@@ -170,7 +156,7 @@ const ProductDetailPage = () => {
 
   const validateAndGetSize = () => {
     if (!product) return false;
-    if ((product.category === 'rings' || product.category === 'ring') && !selectedSize) {
+    if ((product.categorySlug === 'rings' || product.categorySlug === 'ring') && !selectedSize) {
       setSizeError(true);
       document.getElementById('size-selector')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return false;
@@ -192,42 +178,43 @@ const ProductDetailPage = () => {
       addToCart(product, selectedSize || "Standard");
     }
     
-    // --- NEW: Track Add to Cart for Google Analytics ---
     analytics.trackAddToCart(product, quantity);
 
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 2000);
 
     setJustAddedItem({
-      title: product.title,
+      title: product.name,
       price: product.price,
-      image: product.image_urls?.[0] || product.image_url || '', 
+      image: product.image, 
       size: selectedSize || "Standard"
     });
     setIsPopupOpen(true);
   };
 
-  const handleBuyNow = () => {
+ const handleBuyNow = (): void => {
     if (isOutOfStock || !product) return; 
     if (!validateAndGetSize()) return;
 
-    if (existingCartQty + quantity > currentStock) {
-      triggerStockAlert(`Only ${currentStock} total in stock. You already have ${existingCartQty} in cart.`);
+    // 1. Check stock strictly against the requested quantity (ignore what is in the cart)
+    if (quantity > currentStock) {
+      triggerStockAlert(`Only ${currentStock} units available in stock.`);
       return;
     }
 
-    addToCart(product, selectedSize || "Standard");
-    
-    // --- NEW: Track Add to Cart for Google Analytics ---
+    // 🚫 WE COMPLETELY REMOVED addToCart() HERE!
+
+    // Track analytics (Optional, but good for marketing data)
     analytics.trackAddToCart(product, quantity);
 
+    // 2. Take the user straight to checkout with their directPurchase data
     navigate("/checkout", { 
       state: { directPurchase: { ...product, qty: quantity, size: selectedSize || "Standard" } } 
     });
   };
 
   const handleNotifyMe = async () => {
-    if (isNotified || !product) return;
+    if (isNotified || !product || isArchived) return; // Prevent waitlisting archived items
 
     const storedUser = localStorage.getItem("currentUser");
     
@@ -241,7 +228,7 @@ const ProductDetailPage = () => {
 
     const { error } = await supabase.from('waitlist').insert([{
       product_id: product.id,
-      product_name: product.title || product.name,
+      product_name: product.name,
       customer_name: user.name,
       customer_phone: user.phone || user.email || 'N/A'
     }]);
@@ -260,9 +247,8 @@ const ProductDetailPage = () => {
     }
   };
 
-  // --- NEW: TOGGLE ZOOM ON CLICK ---
   const toggleZoom = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (activeImage === -1) return; // Prevent zooming on videos
+    if (activeImage === -1) return; 
     if (!isZooming) {
       const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
       const x = ((e.clientX - left) / width) * 100;
@@ -277,7 +263,6 @@ const ProductDetailPage = () => {
     }
   };
 
-  // --- MODIFIED: PAN ONLY WHEN ZOOMING IS ACTIVE ---
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!imageContainerRef.current || activeImage === -1 || !isZooming) return;
     const { left, top, width, height } = imageContainerRef.current.getBoundingClientRect();
@@ -340,7 +325,7 @@ const ProductDetailPage = () => {
         <div className="hidden md:flex text-xs text-gray-500 mb-6 uppercase tracking-widest items-center gap-2">
           <Link to="/" className="hover:text-rose-600 transition-colors">Home</Link> 
           <ChevronRight size={10} />
-          <Link to={`/category/${product.category}`} className="hover:text-rose-600 transition-colors capitalize">{product.category?.replace('-', ' ')}</Link>
+          <Link to={`/category/${product.categorySlug}`} className="hover:text-rose-600 transition-colors capitalize">{product.categoryName}</Link>
           <ChevronRight size={10} />
           <span className="text-gray-900 font-medium truncate max-w-[200px]">{product.name}</span>
         </div>
@@ -425,9 +410,11 @@ const ProductDetailPage = () => {
                     <span className="text-sm font-bold text-green-600 mb-1.5">{Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF</span>
                   </>
                 )}
+                
+                {/* 🚀 SMART BADGE: Checks if archived vs out of stock */}
                 {isOutOfStock && (
                   <span className="ml-2 mb-1.5 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded uppercase tracking-wider">
-                    Out of Stock
+                    {isArchived ? 'Unavailable' : 'Out of Stock'}
                   </span>
                 )}
               </div>
@@ -456,7 +443,7 @@ const ProductDetailPage = () => {
             )}
 
             <div>
-              {(product.category === 'rings' || product.category === 'ring') && (
+              {(product.categorySlug === 'rings' || product.categorySlug === 'ring') && (
                 <div className="mb-2" id="size-selector">
                   <div className="flex justify-between items-center mb-3">
                      <span className={`text-sm font-bold uppercase tracking-wider ${sizeError ? "text-red-500" : ""}`}>Select Size</span>
@@ -482,8 +469,16 @@ const ProductDetailPage = () => {
                  <div className={`w-5 h-5 border-2 rounded flex items-center justify-center ${isGiftWrapped ? "bg-rose-600 border-rose-600" : "border-gray-300"} ${isOutOfStock ? 'opacity-50' : ''}`}>{isGiftWrapped && <Check size={12} className="text-white" />}</div>
               </div>
 
+              {/* 🚀 DESKTOP BUTTONS: Smart Archive Checks */}
               <div className="hidden lg:flex gap-3 h-12">
-                 {isOutOfStock ? (
+                 {isArchived ? (
+                   <button 
+                     disabled
+                     className="flex-1 bg-gray-100 text-gray-400 font-bold uppercase tracking-widest text-sm rounded-lg border border-gray-200 cursor-not-allowed"
+                   >
+                     Currently Unavailable
+                   </button>
+                 ) : isOutOfStock ? (
                    <button 
                      onClick={handleNotifyMe} 
                      disabled={isNotified}
@@ -526,17 +521,55 @@ const ProductDetailPage = () => {
               </div>
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg">
-               <label className="text-xs font-bold uppercase tracking-wider mb-2 block">Check Delivery</label>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+               <label className="text-xs font-bold uppercase tracking-wider mb-2 block text-gray-800">Check Delivery</label>
                <form onSubmit={handlePincodeCheck} className="flex gap-2 relative">
-                 <input type="text" maxLength={6} placeholder="Enter Pincode" value={pincode} onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))} className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-rose-500" />
-                 <button disabled={pincode.length !== 6} className="text-rose-600 text-xs font-bold px-4 hover:bg-rose-100 rounded disabled:text-gray-400 cursor-pointer">CHECK</button>
+                 <input 
+                   type="text" 
+                   maxLength={6} 
+                   placeholder="Enter Pincode" 
+                   value={pincode} 
+                   onChange={(e) => {
+                     setPincode(e.target.value.replace(/\D/g, ''));
+                     setIsPincodeChecked(false); 
+                   }} 
+                   className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-rose-500 bg-white transition-colors" 
+                 />
+                 <button disabled={pincode.length !== 6} className="text-rose-600 text-xs font-bold px-4 hover:bg-rose-100 rounded disabled:text-gray-400 cursor-pointer transition-colors">
+                   CHECK
+                 </button>
                </form>
-               {isPincodeChecked && <p className="mt-2 text-xs text-green-700 flex items-center gap-1"><Truck size={12} /> Delivery by <b>Tomorrow</b></p>}
+
+               <AnimatePresence>
+                 {isPincodeChecked && (
+                   <motion.div 
+                     initial={{ opacity: 0, y: -5 }}
+                     animate={{ opacity: 1, y: 0 }}
+                     exit={{ opacity: 0, y: -5 }}
+                     className="mt-4 space-y-2.5 border-t border-gray-200 pt-3"
+                   >
+                     <p className="text-xs text-green-700 flex items-center gap-2 font-medium">
+                       <span className="bg-green-100 p-0.5 rounded-full"><Check size={12} strokeWidth={3} /></span> 
+                       Delivery available to <b>{pincode}</b>
+                     </p>
+                     <p className="text-xs text-gray-600 flex items-center gap-2">
+                       <Truck size={14} className="text-gray-400" /> 
+                       Standard Delivery in 3-5 Business Days
+                     </p>
+                     <p className="text-xs text-gray-600 flex items-center gap-2">
+                       <CreditCard size={14} className="text-gray-400" /> 
+                       {product.price > 10000 ? "Prepaid Orders Only (High Value)" : "Cash on Delivery Available"}
+                     </p>
+                     <p className="text-xs text-gray-600 flex items-center gap-2">
+                       <Sparkles size={14} className="text-amber-500" /> 
+                       {product.price >= 999 ? "Free Shipping on this item" : "Standard shipping rates apply"}
+                     </p>
+                   </motion.div>
+                 )}
+               </AnimatePresence>
             </div>
 
             <div className="border-t border-gray-100 pt-2">
-               {/* 1. Description Accordion */}
                <AccordionItem title="Product Description">
                  {product.detail_description ? (
                    <div 
@@ -544,13 +577,12 @@ const ProductDetailPage = () => {
                      dangerouslySetInnerHTML={{ __html: product.detail_description }} 
                    />
                  ) : (
-                   <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">
-                     {product.description || `Handcrafted with love, this ${product.name} is made from 925 Sterling Silver.`}
-                   </p>
+                    <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap break-words">
+                      {product.description || `Handcrafted with love, this ${product.name} is made from 925 Sterling Silver.`}
+                    </p>
                  )}
                </AccordionItem>
                
-               {/* 2. Specifications Accordion */}
                <AccordionItem title="Product Specifications">
                  {product.specifications ? (
                    <div 
@@ -565,7 +597,6 @@ const ProductDetailPage = () => {
                  )}
                </AccordionItem>
                
-               {/* 3. Shipping & Returns Accordion */}
                <AccordionItem title="Shipping & Returns">
                  {product.shipping_returns ? (
                    <div 
@@ -594,9 +625,16 @@ const ProductDetailPage = () => {
         </div>
       </main>
 
-      {/* MOBILE BOTTOM NAV */}
+      {/* 🚀 MOBILE BOTTOM NAV: Smart Archive Checks */}
       <div className="fixed bottom-0 left-0 right-0 bg-white z-50 p-3 border-t border-gray-100 flex gap-3 lg:hidden shadow-[0_-4px_15px_rgba(0,0,0,0.05)] pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
-         {isOutOfStock ? (
+         {isArchived ? (
+           <button 
+             disabled
+             className="flex-1 bg-gray-100 text-gray-400 font-bold uppercase tracking-widest text-xs rounded-lg py-3.5 shadow-sm border border-gray-200 flex items-center justify-center cursor-not-allowed"
+           >
+             Unavailable
+           </button>
+         ) : isOutOfStock ? (
            <button 
              onClick={handleNotifyMe} 
              disabled={isNotified}
@@ -662,9 +700,8 @@ const ProductDetailPage = () => {
       
       <ProductReviews 
         productId={product.id} 
-        categoryName={product.categories?.name || ""} 
+        categoryName={product.categoryName || ""} 
       />
-      {/* Put this near the bottom of your file */}
       <AddToCartPopup 
         isOpen={isPopupOpen} 
         onClose={() => setIsPopupOpen(false)} 

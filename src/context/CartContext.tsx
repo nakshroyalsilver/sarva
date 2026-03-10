@@ -26,8 +26,9 @@ interface CartContextType {
   addToCart: (product: Product, size?: string) => void;
   removeFromCart: (id: string) => void;
   updateQty: (id: string, delta: number) => void;
+  clearCart: () => void; // 🚀 ADDED: clearCart function
 
-  // Wishlist State (NEW)
+  // Wishlist State
   wishlistItems: Product[];
   wishlistCount: number;
   toggleWishlist: (product: Product) => void;
@@ -77,6 +78,11 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
     );
   };
 
+  // 🚀 ADDED: The clearCart function implementation
+  const clearCart = () => {
+    setCartItems([]);
+  };
+
   const cartCount = cartItems.reduce((acc, item) => acc + item.qty, 0);
 
   // --- WISHLIST STATE ---
@@ -106,7 +112,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   return (
     <CartContext.Provider 
       value={{ 
-        cartItems, cartCount, addToCart, removeFromCart, updateQty, 
+        cartItems, cartCount, addToCart, removeFromCart, updateQty, clearCart, // 🚀 ADDED: Passed clearCart down to the app
         wishlistItems, wishlistCount, toggleWishlist 
       }}
     >
