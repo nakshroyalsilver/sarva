@@ -20,6 +20,34 @@ const CartPage = () => {
   
   const [liveCartStatus, setLiveCartStatus] = useState<Record<string, any>>({});
 
+  // 🚀 FIX: Actually fetch the live stock data for items inside the cart
+  useEffect(() => {
+    const fetchLiveCartStatus = async () => {
+      if (!cartItems || cartItems.length === 0) {
+        setLiveCartStatus({});
+        return;
+      }
+
+      // Get all unique product IDs currently in the cart
+      const itemIds = cartItems.map((item: any) => item.id);
+
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, stock_quantity, is_archived')
+        .in('id', itemIds);
+
+      if (!error && data) {
+        const statusMap: Record<string, any> = {};
+        data.forEach(product => {
+          statusMap[product.id] = product;
+        });
+        setLiveCartStatus(statusMap);
+      }
+    };
+
+    fetchLiveCartStatus();
+  }, [cartItems]);
+
   
   // Fetch real products from Supabase for "More to Love"
   useEffect(() => {
@@ -31,7 +59,6 @@ const CartPage = () => {
         .limit(8); 
         
       if (!error && data) {
-        // Define what the raw data from Supabase looks like
         interface RawSupabaseProduct {
           id: string;
           title?: string;
@@ -47,7 +74,7 @@ const CartPage = () => {
           .filter((p: RawSupabaseProduct) => !cartItems.find((c: any) => c.id === p.id))
           .slice(0, 4);
         
-        // 🚀 2. FIX: Format the data so 'name' and 'image' match what the CartContext expects!
+        // 2. Format the data so 'name' and 'image' match what the CartContext expects!
         const formatted = filtered.map((p: RawSupabaseProduct) => ({
           ...p,
           name: p.title || p.name || 'Premium Jewelry Piece',
@@ -77,7 +104,7 @@ const CartPage = () => {
     if (cartItems.length > 0) {
       analytics.trackViewCart(total, cartItems);
     }
-  }, [cartItems.length, total]); // Added total to dependency array for accuracy
+  }, [cartItems.length, total]); 
 
   // 🚀 SMART CHECKOUT VALIDATION
   // Prevents user from going to checkout if they are holding an archived or out-of-stock item

@@ -5,7 +5,8 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { supabase } from "../../supabase"; 
 import { Helmet } from "react-helmet-async";
-import { analytics } from "@/lib/analytics"; // <-- NEW: Analytics Import
+import { analytics } from "@/lib/analytics"; 
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 
 // --- 1. SUPER INITIALIZATION: Catch the clue before Supabase erases it ---
 if (typeof window !== "undefined") {
@@ -47,7 +48,7 @@ const LoginPage = () => {
           setIsSignUp(false);
         }
       } else if (event === 'SIGNED_IN') {
-        // Dynamic redirect: Catch Google Auth and standard logins instantly
+        // Dynamic redirect: Catch standard logins instantly
         if (!isRecovering && !isForgotPassword) {
           handlePostLoginRouting();
         }
@@ -63,42 +64,49 @@ const LoginPage = () => {
 
   // --- Handlers ---
   const handlePostLoginRouting = () => {
-    const pendingShipping = localStorage.getItem("pending_save_shipping");
-    if (pendingShipping) {
-      localStorage.setItem("saved_shipping_address", pendingShipping);
-      localStorage.removeItem("pending_save_shipping");
-    }
-
-    const pendingBilling = localStorage.getItem("pending_save_billing");
-    if (pendingBilling) {
-      localStorage.setItem("checkout_billing", pendingBilling);
-      localStorage.removeItem("pending_save_billing");
-    }
-
-    const pendingSameAs = localStorage.getItem("pending_billing_same");
-    if (pendingSameAs) {
-      localStorage.setItem("checkout_billing_same", pendingSameAs);
-      localStorage.removeItem("pending_billing_same");
-    }
-
-    localStorage.setItem("checkout_step", "3");
-
-    // Redirect defaults to Home Page ("/")
+    // Redirect defaults to Home Page ("/") if no redirect is found in the URL
     const searchParams = new URLSearchParams(location.search);
     const redirectUrl = searchParams.get("redirect") || "/"; 
     
-    setTimeout(() => navigate(redirectUrl), 800);
+    // 🚀 NEW: Added { replace: true } so the user can't hit the back button and end up on the login page again
+    setTimeout(() => navigate(redirectUrl, { replace: true }), 800);
   };
 
-  const handleGoogleLogin = async () => {
+  //  Silent Google ID Token Login Handler
+  const handleGoogleSuccess = async (credentialResponse: any) => {
     setIsLoading(true);
     setError("");
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    });
-    if (error) {
-      setError(error.message);
+    
+    try {
+      const idToken = credentialResponse.credential;
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+
+      if (error) throw error;
+
+      // Safely fetch name and email
+      const user = data.user;
+      const realName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
+      
+      const userData = { 
+        name: realName, 
+        email: user?.email 
+      };
+      
+      localStorage.setItem("currentUser", JSON.stringify(userData));
+      localStorage.setItem("isLoggedIn", "true");
+
+      analytics.trackLogin("Google");
+
+      setSuccessMsg("Welcome back! Redirecting...");
+      handlePostLoginRouting();
+
+    } catch (err: any) {
+      console.error("Google Login Error:", err);
+      setError(err.message || "Failed to authenticate with Google. Please try again.");
       setIsLoading(false);
     }
   };
@@ -223,7 +231,6 @@ const LoginPage = () => {
         localStorage.setItem("currentUser", JSON.stringify(userData));
         localStorage.setItem("isLoggedIn", "true");
 
-        // --- NEW: Track Sign Up for Google Analytics ---
         analytics.trackSignUp("Email");
 
         setSuccessMsg("Account created! Redirecting...");
@@ -252,7 +259,6 @@ const LoginPage = () => {
         localStorage.setItem("currentUser", JSON.stringify(finalUserData));
         localStorage.setItem("isLoggedIn", "true");
         
-        // --- NEW: Track Login for Google Analytics ---
         analytics.trackLogin("Email");
 
         setSuccessMsg("Welcome back! Redirecting...");
@@ -267,172 +273,177 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-white font-sans text-gray-900">
-       <Helmet>
-        <title>{isUpdatePassword ? "Create New Password" : isForgotPassword ? "Reset Password" : isSignUp ? "Sign Up" : "Login"} | Sarvaa Fine Jewelry</title>
-        <meta name="robots" content="noindex, nofollow" />
-      </Helmet>
-      <Navbar />
+    <GoogleOAuthProvider clientId="259277543007-5684nt6lidvamcipjdvr96qc0rsubjrc.apps.googleusercontent.com">
+      <div className="min-h-screen flex flex-col bg-white font-sans text-gray-900">
+         <Helmet>
+          <title>{isUpdatePassword ? "Create New Password" : isForgotPassword ? "Reset Password" : isSignUp ? "Sign Up" : "Login"} | Sarvaa Fine Jewelry</title>
+          <meta name="robots" content="noindex, nofollow" />
+        </Helmet>
+        <Navbar />
 
-      <main className="flex-grow flex items-center justify-center py-12 px-4 bg-[#FCFCFC]">
-        <div className="w-full max-w-sm">
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 relative overflow-hidden">
-            <div className="bg-gradient-to-b from-rose-50 to-white pt-12 pb-6 text-center px-6">
-              <h1 className="text-logo mb-2">Sarvaa</h1>
-              <p className="text-[10px] text-gray-400 uppercase tracking-[0.2em] font-bold mt-2">
-                {isUpdatePassword ? "Secure your account" : isForgotPassword ? "Reset your password" : isSignUp ? "Create your account" : "Welcome to Luxury"}
-              </p>
-            </div>
+        <main className="flex-grow flex items-center justify-center py-12 px-4 bg-[#FCFCFC]">
+          <div className="w-full max-w-sm">
+            <div className="bg-white rounded-2xl shadow-xl border border-gray-100 relative overflow-hidden">
+              <div className="bg-gradient-to-b from-rose-50 to-white pt-12 pb-6 text-center px-6">
+                <h1 className="text-logo mb-2">Sarvaa</h1>
+                <p className="text-[10px] text-gray-400 uppercase tracking-[0.2em] font-bold mt-2">
+                  {isUpdatePassword ? "Secure your account" : isForgotPassword ? "Reset your password" : isSignUp ? "Create your account" : "Welcome to Luxury"}
+                </p>
+              </div>
 
-            <div className="p-8 pt-2">
-              {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg text-center font-medium">{error}</div>}
-              {successMsg && <div className="mb-4 p-3 bg-green-50 text-green-700 text-xs rounded-lg text-center font-medium">{successMsg}</div>}
+              <div className="p-8 pt-2">
+                {error && <div className="mb-4 p-3 bg-red-50 text-red-600 text-xs rounded-lg text-center font-medium">{error}</div>}
+                {successMsg && <div className="mb-4 p-3 bg-green-50 text-green-700 text-xs rounded-lg text-center font-medium">{successMsg}</div>}
 
-              {/* Hide Google Login if we are in Reset OR Update mode */}
-              {!isForgotPassword && !isUpdatePassword && (
-                <>
-                  <button onClick={handleGoogleLogin} disabled={isLoading} type="button" className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 font-bold py-3.5 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-50">
-                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
-                    <span className="text-sm">Continue with Google</span>
-                  </button>
-
-                  <div className="flex items-center my-6">
-                    <div className="flex-1 border-t border-gray-100"></div>
-                    <span className="px-3 text-[10px] uppercase font-bold text-gray-300 tracking-widest">or</span>
-                    <div className="flex-1 border-t border-gray-100"></div>
-                  </div>
-                </>
-              )}
-
-              {/* DYNAMIC FORM RENDERING */}
-              {isUpdatePassword ? (
-                /* --- UPDATE PASSWORD FORM --- */
-                <form onSubmit={handleUpdatePassword} className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Enter New Password</label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                      <input required type="password" placeholder="••••••••" minLength={6} className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
+                {/* Hide Google Login if we are in Reset OR Update mode */}
+                {!isForgotPassword && !isUpdatePassword && (
+                  <>
+                    <div className="w-full flex justify-center pb-1">
+                      <GoogleLogin
+                        onSuccess={handleGoogleSuccess}
+                        onError={() => setError("Google sign-in was canceled or failed.")}
+                        useOneTap 
+                      />
                     </div>
-                  </div>
 
-                  <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
-                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Save Password"}
-                  </button>
-
-                  {/* CANCEL BUTTON: Kills Ghost Session */}
-                  <div className="mt-4 text-center">
-                    <button type="button" onClick={() => { 
-                      setIsUpdatePassword(false); 
-                      sessionStorage.removeItem("isRecovering");
-                      if (window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
-                      setError(""); 
-                      setSuccessMsg(""); 
-                      supabase.auth.signOut().catch(() => {});
-                    }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
-                      <ArrowLeft size={14} /> Cancel Reset
-                    </button>
-                  </div>
-                </form>
-
-              ) : isForgotPassword ? (
-                /* --- FORGOT PASSWORD FORM --- */
-                <form onSubmit={handleResetPassword} className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Enter your Email</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                      <input required type="email" placeholder="email@example.com" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+                    <div className="flex items-center my-6">
+                      <div className="flex-1 border-t border-gray-100"></div>
+                      <span className="px-3 text-[10px] uppercase font-bold text-gray-300 tracking-widest">or</span>
+                      <div className="flex-1 border-t border-gray-100"></div>
                     </div>
-                  </div>
+                  </>
+                )}
 
-                  <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
-                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Send Reset Link"}
-                  </button>
-
-                  <div className="mt-4 text-center">
-                    <button type="button" onClick={() => { setIsForgotPassword(false); setError(""); setSuccessMsg(""); }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
-                      <ArrowLeft size={14} /> Back to Login
-                    </button>
-                  </div>
-                </form>
-
-              ) : (
-                /* --- NORMAL LOGIN / SIGNUP FORM --- */
-                <form onSubmit={handleEmailAuth} className="space-y-4">
-                  {isSignUp && (
+                {/* DYNAMIC FORM RENDERING */}
+                {isUpdatePassword ? (
+                  /* --- UPDATE PASSWORD FORM --- */
+                  <form onSubmit={handleUpdatePassword} className="space-y-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Full Name</label>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Enter New Password</label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                        <input required type="text" placeholder="Full Name" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input required type="password" placeholder="••••••••" minLength={6} className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
                       </div>
                     </div>
-                  )}
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Email Address</label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                      <input required type="email" placeholder="email@example.com" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
-                    </div>
-                  </div>
+                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
+                      {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Save Password"}
+                    </button>
 
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between pl-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Password</label>
-                      {!isSignUp && (
-                        <button 
-                          type="button" 
-                          onClick={() => { setIsForgotPassword(true); setError(""); setSuccessMsg(""); }} 
-                          className="text-[10px] font-bold text-rose-600 hover:text-rose-700 transition-colors cursor-pointer"
-                        >
-                          Forgot?
-                        </button>
-                      )}
+                    {/* CANCEL BUTTON: Kills Ghost Session */}
+                    <div className="mt-4 text-center">
+                      <button type="button" onClick={() => { 
+                        setIsUpdatePassword(false); 
+                        sessionStorage.removeItem("isRecovering");
+                        if (window.history.replaceState) window.history.replaceState(null, "", window.location.pathname);
+                        setError(""); 
+                        setSuccessMsg(""); 
+                        supabase.auth.signOut().catch(() => {});
+                      }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
+                        <ArrowLeft size={14} /> Cancel Reset
+                      </button>
                     </div>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                      <input required type="password" placeholder="••••••••" minLength={6} className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
-                    </div>
-                  </div>
+                  </form>
 
-                  {isSignUp && (
+                ) : isForgotPassword ? (
+                  /* --- FORGOT PASSWORD FORM --- */
+                  <form onSubmit={handleResetPassword} className="space-y-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Gender</label>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Enter your Email</label>
                       <div className="relative">
-                        <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                        <select required className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all appearance-none bg-white font-medium text-gray-700 cursor-pointer" value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
-                          <option value="">Select Gender</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option>
-                        </select>
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input required type="email" placeholder="email@example.com" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
                       </div>
                     </div>
-                  )}
 
-                  <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
-                    {isLoading ? <Loader2 size={16} className="animate-spin" /> : (isSignUp ? "Create Account" : "Sign In")}
-                  </button>
-                </form>
-              )}
+                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
+                      {isLoading ? <Loader2 size={16} className="animate-spin" /> : "Send Reset Link"}
+                    </button>
 
-              {/* Hide the toggle buttons if we are in Forgot Password or Update Password mode */}
-              {!isForgotPassword && !isUpdatePassword && (
-                <div className="mt-6 text-center">
-                  <button onClick={() => { setIsSignUp(!isSignUp); setError(""); setFormData({ name: "", email: "", password: "", gender: "" }); }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors cursor-pointer">
-                    {isSignUp ? "Already have an account? Log In" : "Don't have an account? Sign Up"}
-                  </button>
+                    <div className="mt-4 text-center">
+                      <button type="button" onClick={() => { setIsForgotPassword(false); setError(""); setSuccessMsg(""); }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors flex items-center justify-center gap-1 mx-auto cursor-pointer">
+                        <ArrowLeft size={14} /> Back to Login
+                      </button>
+                    </div>
+                  </form>
+
+                ) : (
+                  /* --- NORMAL LOGIN / SIGNUP FORM --- */
+                  <form onSubmit={handleEmailAuth} className="space-y-4">
+                    {isSignUp && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Full Name</label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                          <input required type="text" placeholder="Full Name" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Email Address</label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input required type="email" placeholder="email@example.com" className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between pl-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Password</label>
+                        {!isSignUp && (
+                          <button 
+                            type="button" 
+                            onClick={() => { setIsForgotPassword(true); setError(""); setSuccessMsg(""); }} 
+                            className="text-[10px] font-bold text-rose-600 hover:text-rose-700 transition-colors cursor-pointer"
+                          >
+                            Forgot?
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                        <input required type="password" placeholder="••••••••" minLength={6} className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all" value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
+                      </div>
+                    </div>
+
+                    {isSignUp && (
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pl-1">Gender</label>
+                        <div className="relative">
+                          <Users className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                          <select required className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none focus:border-rose-500 transition-all appearance-none bg-white font-medium text-gray-700 cursor-pointer" value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
+                            <option value="">Select Gender</option><option value="female">Female</option><option value="male">Male</option><option value="other">Other</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    <button type="submit" disabled={isLoading} className="w-full mt-2 bg-rose-600 text-white py-3.5 rounded-xl font-bold uppercase tracking-widest text-xs hover:bg-rose-700 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md">
+                      {isLoading ? <Loader2 size={16} className="animate-spin" /> : (isSignUp ? "Create Account" : "Sign In")}
+                    </button>
+                  </form>
+                )}
+
+                {/* Hide the toggle buttons if we are in Forgot Password or Update Password mode */}
+                {!isForgotPassword && !isUpdatePassword && (
+                  <div className="mt-6 text-center">
+                    <button onClick={() => { setIsSignUp(!isSignUp); setError(""); setFormData({ name: "", email: "", password: "", gender: "" }); }} className="text-xs font-medium text-gray-500 hover:text-rose-600 transition-colors cursor-pointer">
+                      {isSignUp ? "Already have an account? Log In" : "Don't have an account? Sign Up"}
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-center gap-2 text-green-700 bg-green-50 py-2 rounded-xl mx-[-10px] mb-[-10px]">
+                  <ShieldCheck size={14} /><span className="text-[10px] font-bold uppercase tracking-widest">Secure SSL Encryption</span>
                 </div>
-              )}
-
-              <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-center gap-2 text-green-700 bg-green-50 py-2 rounded-xl mx-[-10px] mb-[-10px]">
-                <ShieldCheck size={14} /><span className="text-[10px] font-bold uppercase tracking-widest">Secure SSL Encryption</span>
               </div>
             </div>
           </div>
-        </div>
-      </main>
-      <Footer />
-    </div>
+        </main>
+        <Footer />
+      </div>
+    </GoogleOAuthProvider>
   );
 };
 

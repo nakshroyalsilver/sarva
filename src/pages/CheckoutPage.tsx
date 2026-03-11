@@ -14,9 +14,40 @@ const CheckoutPage = () => {
   const { state } = useLocation();
   const navigate = useNavigate();
   
-  // 🚀 INJECTED removeFromCart & clearCart to handle safe cleanups
   const { cartItems, clearCart, removeFromCart } = useCart();
+
   
+  
+
+  const currentUser = localStorage.getItem("currentUser");
+
+  // 1. Redirect Guest Users to Login, but save their "Buy Now" item first
+  useEffect(() => {
+    if (!currentUser) {
+      if (state?.directPurchase) {
+        localStorage.setItem("pending_direct_purchase", JSON.stringify(state.directPurchase));
+      }
+      navigate("/login?redirect=/checkout", { replace: true });
+    }
+  }, [currentUser, navigate, state]);
+
+  // 2. Recover the "Buy Now" item into STATE so it survives re-renders
+  const [directPurchaseData] = useState(() => {
+    // If they were already logged in, grab it from the router state
+    if (state?.directPurchase) return state.directPurchase;
+    
+    // If they just came from the Login page, grab it from memory
+    const saved = localStorage.getItem("pending_direct_purchase");
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  // 3. Clean up the temporary storage ONLY AFTER it is safely locked in our state
+  useEffect(() => {
+    if (localStorage.getItem("pending_direct_purchase")) {
+      localStorage.removeItem("pending_direct_purchase");
+    }
+  }, []);
+
   // --- PERSISTENT CHECKOUT DRAFT LOGIC ---
   const [activeStep, setActiveStep] = useState(() => {
     const saved = localStorage.getItem("checkout_step");
@@ -27,9 +58,8 @@ const CheckoutPage = () => {
     const saved = localStorage.getItem("checkout_contact");
     if (saved) return JSON.parse(saved);
     
-    const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
+    if (currentUser) {
+      const parsedUser = JSON.parse(currentUser);
       return { phone: "", email: parsedUser.email || "" };
     }
     return { phone: "", email: "" };
@@ -42,9 +72,8 @@ const CheckoutPage = () => {
     const permanentlySaved = localStorage.getItem("saved_shipping_address");
     if (permanentlySaved) return JSON.parse(permanentlySaved);
 
-    const storedUser = localStorage.getItem("currentUser");
-    if (storedUser) {
-      const parsedUser = JSON.parse(storedUser);
+    if (currentUser) {
+      const parsedUser = JSON.parse(currentUser);
       return {
         firstName: parsedUser.name?.split(' ')[0] || "",
         lastName: parsedUser.name?.split(' ').slice(1).join(' ') || "",
@@ -132,7 +161,8 @@ const CheckoutPage = () => {
     fetchActiveCoupons();
   }, []);
 
-  const checkoutItems = state?.directPurchase ? [state.directPurchase] : cartItems;
+  // 🚀 Modified to use the recovered direct purchase data
+  const checkoutItems = directPurchaseData ? [directPurchaseData] : cartItems;
 
   // ==========================================
   // --- STRICT PRICING MATH LOGIC ---
@@ -169,6 +199,15 @@ const CheckoutPage = () => {
       hasTrackedCheckout.current = true;
     }
   }, [checkoutItems, total]);
+
+  // Early return for unauthenticated users to prevent UI flash during redirect
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#FCFCFC]">
+        <Loader2 className="animate-spin text-rose-600" size={32} />
+      </div>
+    );
+  }
 
   if (!checkoutItems || checkoutItems.length === 0) {
     return <Navigate to="/cart" />;
@@ -265,7 +304,7 @@ const CheckoutPage = () => {
 
   // --- NAVIGATION HANDLERS ---
   const handleBack = () => {
-    if (state?.directPurchase) navigate(-1);
+    if (directPurchaseData) navigate(-1);
     else navigate("/cart");
   };
 
@@ -299,19 +338,8 @@ const CheckoutPage = () => {
 
   const handleSaveAddressChoice = (save: boolean) => {
     if (save) {
-      const storedUser = localStorage.getItem("currentUser");
-      
-      if (!storedUser) {
-        localStorage.setItem("pending_save_shipping", JSON.stringify(shippingInfo));
-        localStorage.setItem("pending_save_billing", JSON.stringify(billingInfo));
-        localStorage.setItem("pending_billing_same", JSON.stringify(isBillingSameAsShipping));
-        localStorage.setItem("checkout_step", "3"); 
-        setShowSaveAddressPrompt(false);
-        navigate("/login?redirect=/checkout");
-        return; 
-      } else {
-        localStorage.setItem("saved_shipping_address", JSON.stringify(shippingInfo));
-      }
+      // User is guaranteed logged in now, safe to save permanently
+      localStorage.setItem("saved_shipping_address", JSON.stringify(shippingInfo));
     }
     setShowSaveAddressPrompt(false);
     setActiveStep(3); 
@@ -341,10 +369,7 @@ const CheckoutPage = () => {
           alert(`Oh no! Another customer just bought the last "${item.title || item.name}". It is now out of stock.`);
           setIsProcessing(false);
           
-          // Auto-remove the item from their cart so they aren't stuck with it
           removeFromCart(item.id);
-          
-          // Redirect them safely back to the cart to review
           navigate('/cart');
           return; 
         }
@@ -352,9 +377,6 @@ const CheckoutPage = () => {
 
       const finalBillingAddress = isBillingSameAsShipping ? shippingInfo : billingInfo;
 
-      // ========================================================
-      // --- BULLETPROOF ORDER CREATION VIA RPC TRANSACTION ---
-      // ========================================================
       const { data: newOrderId, error: rpcError } = await supabase.rpc('place_order', {
         p_total_amount: total,
         p_status: 'Pending WhatsApp',
@@ -379,24 +401,20 @@ const CheckoutPage = () => {
 
       if (rpcError) {
         if (rpcError.message.includes('OUT_OF_STOCK')) {
-             throw new Error("Just missed it! Another customer bought the last piece a second ago. Please review your cart.");
+              throw new Error("Just missed it! Another customer bought the last piece a second ago. Please review your cart.");
         }
         throw rpcError;
       }
-      // ========================================================
 
-      // --- TRACK SUCCESSFUL PURCHASE FOR GOOGLE ANALYTICS ---
       analytics.trackWhatsAppOrder(newOrderId, total);
 
-      // 🚀 THE SILENT CLEANUP FIX
-      if (state?.directPurchase) {
-        // If they used "Buy Now", see if it was lingering in their cart
-        const itemWasInCart = cartItems.find((item: any) => item.id === state.directPurchase.id);
+      // 🚀 THE SILENT CLEANUP FIX (Updated to use directPurchaseData)
+      if (directPurchaseData) {
+        const itemWasInCart = cartItems.find((item: any) => item.id === directPurchaseData.id);
         if (itemWasInCart) {
-          removeFromCart(state.directPurchase.id); // Safely remove it!
+          removeFromCart(directPurchaseData.id); 
         }
       } else {
-        // If it was a normal cart checkout, clear the cart properly
         clearCart();
       }
 
@@ -462,7 +480,7 @@ const CheckoutPage = () => {
       const whatsappItemList = checkoutItems.map((item: any, index: number) => {
         const productName = item.title || item.name || "Premium Jewelry Piece";
         const sizeInfo = item.size ? ` (Size: ${item.size})` : "";
-        return `${index + 1}. *${productName}*${sizeInfo}\n    Qty: ${item.qty} × Rs.${item.price.toLocaleString()} = Rs.${(item.price * item.qty).toLocaleString()}`;
+        return `${index + 1}. *${productName}*${sizeInfo}\n   Qty: ${item.qty} × Rs.${item.price.toLocaleString()} = Rs.${(item.price * item.qty).toLocaleString()}`;
       }).join('\n\n');
 
       const businessWhatsApp = import.meta.env.VITE_BUSINESS_WHATSAPP;

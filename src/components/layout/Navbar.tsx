@@ -34,7 +34,6 @@ const Navbar = () => {
   const [pincode, setPincode] = useState(localStorage.getItem("user_pincode") || "Select Location");
   const [tempPincode, setTempPincode] = useState("");
 
-  // --- NEW: PROFILE MODAL STATES ---
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [savedAddress, setSavedAddress] = useState<any>(null);
   const [isEditingAddress, setIsEditingAddress] = useState(false);
@@ -43,20 +42,31 @@ const Navbar = () => {
   const [navCategories, setNavCategories] = useState<any[]>([...staticLeftCategories, ...staticRightCategories]);
   const [categoryLinks, setCategoryLinks] = useState<{name: string, path: string}[]>([]);
 
-  // Search Logic
   const [searchQuery, setSearchQuery] = useState("");
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Dynamic Search States
   const [popularSearches, setPopularSearches] = useState<string[]>([]);
   const [trendingProducts, setTrendingProducts] = useState<any[]>([]);
   const [allAvailableSuggestions, setAllAvailableSuggestions] = useState<string[]>([]); 
 
-  // Announcement Bar Logic
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [announcementIndex, setAnnouncementIndex] = useState(0);
+
+  // 🚀 FIXED: SCROLL BLEED PREVENTION
+  // Locks the background page from scrolling when the mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+    // Safety cleanup just in case component unmounts while menu is open
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     async function fetchAnnouncements() {
@@ -136,12 +146,10 @@ const Navbar = () => {
   if (storedUser) setUser(JSON.parse(storedUser));
 
   const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-    // Check if we are in a recovery flow RIGHT NOW
     const isRecovering = window.location.hash.includes("type=recovery") || 
                          window.location.search.includes("reset=true");
 
     if (event === 'SIGNED_IN' && session?.user) {
-      // IF RECOVERING: Do NOT save to localStorage. Just stay quiet.
       if (isRecovering) return; 
 
       const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
@@ -157,15 +165,14 @@ const Navbar = () => {
   });
   return () => subscription.unsubscribe();
 }, []);
+
   const handleLogout = async () => {
-    // 1. Instantly clear the frontend so the UI feels blazing fast
     localStorage.removeItem("currentUser");
     localStorage.removeItem("isLoggedIn");
     setUser(null);
     setIsProfileModalOpen(false);
     navigate("/"); 
 
-    // 2. Tell Supabase to sign out in the background (with a 2-second crash-proof timeout)
     try {
       await Promise.race([
         supabase.auth.signOut(),
@@ -238,7 +245,6 @@ const Navbar = () => {
     setSearchQuery(""); 
   };
 
-  // --- NEW: PROFILE MODAL HANDLERS ---
   const openProfileModal = () => {
     const address = localStorage.getItem("saved_shipping_address");
     if (address) {
@@ -314,7 +320,14 @@ const Navbar = () => {
               >
                 <Search size={20} strokeWidth={1.5} />
               </button>
-              <Link to="/wishlist"><Heart size={20} strokeWidth={1.5} /></Link>
+              <Link to="/wishlist" className="relative">
+                <Heart size={20} strokeWidth={1.5} />
+                {wishlistCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                    {wishlistCount}
+                  </span>
+                )}
+              </Link>
               <Link to="/cart" className="relative">
                 <ShoppingBag size={20} strokeWidth={1.5} />
                 {cartCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{cartCount}</span>}
@@ -534,11 +547,9 @@ const Navbar = () => {
                         <p className="text-sm font-semibold text-gray-800 truncate">{user.name}</p>
                       </div>
                       
-                      {/* --- NEW: OPENS MODAL DIRECTLY FROM DROPDOWN --- */}
                       <button onClick={openProfileModal} className="w-full text-left block px-4 py-2 text-xs font-medium text-gray-600 hover:bg-rose-50 hover:text-rose-600 cursor-pointer">
                         Profile & Address
                       </button>
-                      {/* ------------------------------------------------ */}
 
                       <Link to="/my-orders" className="block px-4 py-2 text-xs font-medium text-gray-600 hover:bg-rose-50 hover:text-rose-600">My Orders</Link>
                       <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 border-t border-gray-50 mt-1 pt-3 cursor-pointer">Logout</button>
@@ -612,9 +623,16 @@ const Navbar = () => {
           </AnimatePresence>
         </nav>
 
+        {/*  FIXED: DYNAMIC MOBILE MENU TO PREVENT TOP GAP */}
         <AnimatePresence>
           {mobileMenuOpen && (
-            <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="lg:hidden fixed inset-0 top-[110px] bg-white z-50 overflow-y-auto pb-20 border-t border-gray-100">
+            <motion.div 
+              initial={{ x: "-100%" }} 
+              animate={{ x: 0 }} 
+              exit={{ x: "-100%" }} 
+              transition={{ type: "spring", damping: 25, stiffness: 200 }} 
+              className={`lg:hidden fixed inset-x-0 bottom-0 bg-white z-50 overflow-y-auto pb-20 border-t border-gray-100 ${announcements.length > 0 ? 'top-[96px]' : 'top-[56px]'}`}
+            >
               {user ? (
                 <>
                   <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-white">
@@ -628,12 +646,10 @@ const Navbar = () => {
                     <button onClick={handleLogout} className="text-xs font-bold text-rose-600 px-3 py-1.5 bg-rose-50 rounded-md hover:bg-rose-100 cursor-pointer">Logout</button>
                   </div>
                   
-                  {/* --- NEW: MOBILE OPENS MODAL DIRECTLY --- */}
                   <button onClick={openProfileModal} className="w-full px-6 py-3.5 bg-white border-b border-gray-100 text-sm font-bold text-gray-700 hover:text-rose-600 flex items-center justify-between cursor-pointer">
                     <span className="flex items-center gap-2"><User size={16} className="text-rose-500"/> Profile & Address</span>
                     <ChevronRight size={16} className="text-gray-400" />
                   </button>
-                  {/* ----------------------------------------- */}
 
                   <Link to="/my-orders" onClick={() => setMobileMenuOpen(false)} className="block px-6 py-3.5 bg-gray-50 border-b border-gray-100 text-sm font-bold text-gray-700 hover:text-rose-600 flex items-center justify-between">
                     <span className="flex items-center gap-2"><Package size={16} className="text-rose-500"/> Track My Orders</span>
@@ -674,7 +690,7 @@ const Navbar = () => {
         </AnimatePresence>
       </header>
 
-      {/* --- NEW: PROFILE & ADDRESS MODAL --- */}
+      {/* --- PROFILE & ADDRESS MODAL --- */}
       <AnimatePresence>
         {isProfileModalOpen && user && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 font-sans">
@@ -732,21 +748,21 @@ const Navbar = () => {
                        )
                     ) : (
                        <form onSubmit={handleSaveAddress} className="space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
-                            <input required type="text" placeholder="First Name" value={addressForm.firstName} onChange={(e) => setAddressForm({...addressForm, firstName: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
-                            <input type="text" placeholder="Last Name" value={addressForm.lastName} onChange={(e) => setAddressForm({...addressForm, lastName: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
-                          </div>
-                          <input required type="text" placeholder="Flat, House no., Building" value={addressForm.flat} onChange={(e) => setAddressForm({...addressForm, flat: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
-                          <input required type="text" placeholder="Area, Street, Sector" value={addressForm.street} onChange={(e) => setAddressForm({...addressForm, street: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
-                          <div className="grid grid-cols-3 gap-3">
-                            <input required type="text" maxLength={6} placeholder="Pincode" value={addressForm.pincode} onChange={(e) => setAddressForm({...addressForm, pincode: e.target.value.replace(/\D/g, '')})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
-                            <input required type="text" placeholder="City" value={addressForm.city} onChange={(e) => setAddressForm({...addressForm, city: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
-                            <input required type="text" placeholder="State" value={addressForm.state} onChange={(e) => setAddressForm({...addressForm, state: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
-                          </div>
-                          <div className="flex gap-2 pt-2">
-                            <button type="button" onClick={() => setIsEditingAddress(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-200 cursor-pointer transition-colors">Cancel</button>
-                            <button type="submit" className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-colors"><Check size={14}/> Save</button>
-                          </div>
+                         <div className="grid grid-cols-2 gap-3">
+                           <input required type="text" placeholder="First Name" value={addressForm.firstName} onChange={(e) => setAddressForm({...addressForm, firstName: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                           <input type="text" placeholder="Last Name" value={addressForm.lastName} onChange={(e) => setAddressForm({...addressForm, lastName: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                         </div>
+                         <input required type="text" placeholder="Flat, House no., Building" value={addressForm.flat} onChange={(e) => setAddressForm({...addressForm, flat: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                         <input required type="text" placeholder="Area, Street, Sector" value={addressForm.street} onChange={(e) => setAddressForm({...addressForm, street: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                         <div className="grid grid-cols-3 gap-3">
+                           <input required type="text" maxLength={6} placeholder="Pincode" value={addressForm.pincode} onChange={(e) => setAddressForm({...addressForm, pincode: e.target.value.replace(/\D/g, '')})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                           <input required type="text" placeholder="City" value={addressForm.city} onChange={(e) => setAddressForm({...addressForm, city: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                           <input required type="text" placeholder="State" value={addressForm.state} onChange={(e) => setAddressForm({...addressForm, state: e.target.value})} className="w-full border border-gray-200 rounded-lg py-2 px-3 text-sm outline-none focus:border-rose-500 bg-gray-50 focus:bg-white" />
+                         </div>
+                         <div className="flex gap-2 pt-2">
+                           <button type="button" onClick={() => setIsEditingAddress(false)} className="flex-1 py-2.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-200 cursor-pointer transition-colors">Cancel</button>
+                           <button type="submit" className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-gray-800 flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-colors"><Check size={14}/> Save</button>
+                         </div>
                        </form>
                     )}
                  </div>
@@ -756,7 +772,7 @@ const Navbar = () => {
         )}
       </AnimatePresence>
 
-      {/* LOCATION PINCODE MODAL (Unchanged) */}
+      {/* LOCATION PINCODE MODAL */}
       <AnimatePresence>
         {isLocationModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
