@@ -16,9 +16,6 @@ const CheckoutPage = () => {
   
   const { cartItems, clearCart, removeFromCart } = useCart();
 
-  
-  
-
   const currentUser = localStorage.getItem("currentUser");
 
   // 1. Redirect Guest Users to Login, but save their "Buy Now" item first
@@ -43,10 +40,11 @@ const CheckoutPage = () => {
 
   // 3. Clean up the temporary storage ONLY AFTER it is safely locked in our state
   useEffect(() => {
-    if (localStorage.getItem("pending_direct_purchase")) {
+    // FIX: Only delete the item if they are actually logged in!
+    if (currentUser && localStorage.getItem("pending_direct_purchase")) {
       localStorage.removeItem("pending_direct_purchase");
     }
-  }, []);
+  }, [currentUser]);
 
   // --- PERSISTENT CHECKOUT DRAFT LOGIC ---
   const [activeStep, setActiveStep] = useState(() => {
@@ -54,51 +52,74 @@ const CheckoutPage = () => {
     return saved ? Number(saved) : 1;
   });
   
+  //contact info
   const [contactInfo, setContactInfo] = useState(() => {
-    const saved = localStorage.getItem("checkout_contact");
-    if (saved) return JSON.parse(saved);
-    
+    // 1. Try to load the saved checkout contact draft
+    try {
+      const saved = localStorage.getItem("checkout_contact");
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* Ignore and move on */ }
     if (currentUser) {
-      const parsedUser = JSON.parse(currentUser);
-      return { phone: "", email: parsedUser.email || "" };
+      try {
+        const parsedUser = JSON.parse(currentUser);
+        return { phone: "", email: parsedUser.email || "" };
+      } catch (e) { /* Ignore and move on */ }
     }
     return { phone: "", email: "" };
   });
-
+        
+  //Shipping state
   const [shippingInfo, setShippingInfo] = useState(() => {
-    const saved = localStorage.getItem("checkout_shipping");
-    if (saved) return JSON.parse(saved);
-
-    const permanentlySaved = localStorage.getItem("saved_shipping_address");
-    if (permanentlySaved) return JSON.parse(permanentlySaved);
-
+    try {
+      const saved = localStorage.getItem("checkout_shipping");
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* Ignore and move on */ }
+    try {
+      const permanentlySaved = localStorage.getItem("saved_shipping_address");
+      if (permanentlySaved) return JSON.parse(permanentlySaved);
+    } catch (e) { /* Ignore and move on */ }
     if (currentUser) {
-      const parsedUser = JSON.parse(currentUser);
-      return {
-        firstName: parsedUser.name?.split(' ')[0] || "",
-        lastName: parsedUser.name?.split(' ').slice(1).join(' ') || "",
-        flat: "", street: "", pincode: "", city: "", state: ""
-      };
+      try { 
+        const parsedUser = JSON.parse(currentUser);
+        return {
+          firstName: parsedUser.name?.split(' ')[0] || "",
+          lastName: parsedUser.name?.split(' ').slice(1).join(' ') || "",
+          flat: "", street: "", pincode: "", city: "", state: ""
+        };
+      } catch (e) { /* Ignore and move on */ }
     }
     return { firstName: "", lastName: "", flat: "", street: "", pincode: "", city: "", state: "" };
   });
 
   // --- BILLING ADDRESS STATE ---
   const [billingInfo, setBillingInfo] = useState(() => {
-    const saved = localStorage.getItem("checkout_billing");
-    if (saved) return JSON.parse(saved);
+    // 1. Try to load the saved checkout billing draft
+    try {
+      const saved = localStorage.getItem("checkout_billing");
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* Ignore and move on */ }
 
-    const pending = localStorage.getItem("pending_save_billing");
-    if (pending) return JSON.parse(pending);
+    // 2. Try to load any pending saved billing address
+    try {
+      const pending = localStorage.getItem("pending_save_billing");
+      if (pending) return JSON.parse(pending);
+    } catch (e) { /* Ignore and move on */ }
 
+    // 3. If EVERYTHING fails, return a safe, empty form!
     return { firstName: "", lastName: "", flat: "", street: "", city: "", state: "", pincode: "" };
   });
 
   const [isBillingSameAsShipping, setIsBillingSameAsShipping] = useState(() => {
-    const savedSame = localStorage.getItem("pending_billing_same");
-    return savedSame ? JSON.parse(savedSame) : true;
+    try {
+      const savedSame = localStorage.getItem("pending_billing_same");
+      // Check for null specifically, because JSON.parse("false") is valid!
+      if (savedSame !== null) return JSON.parse(savedSame); 
+    } catch (e) { /* Ignore and fallback */ }
+    
+    // Default fallback
+    return true; 
   });
-
+  
   // --- POPUP STATE ---
   const [showSaveAddressPrompt, setShowSaveAddressPrompt] = useState(false);
 
@@ -111,8 +132,11 @@ const CheckoutPage = () => {
 
   // Save the applied coupon to local storage
   const [appliedCoupon, setAppliedCoupon] = useState<any | null>(() => {
-    const saved = localStorage.getItem("checkout_coupon");
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem("checkout_coupon");
+      if (saved) return JSON.parse(saved);
+    } catch (e) { /* Ignore and fallback */ }
+    return null;
   });
 
   // Auto-save changes to localStorage as they type
@@ -164,9 +188,7 @@ const CheckoutPage = () => {
   // 🚀 Modified to use the recovered direct purchase data
   const checkoutItems = directPurchaseData ? [directPurchaseData] : cartItems;
 
-  // ==========================================
-  // --- STRICT PRICING MATH LOGIC ---
-  // ==========================================
+  
   const subtotal = checkoutItems?.reduce((acc: number, item: any) => acc + (Number(item.price) * Number(item.qty)), 0) || 0;
   
   useEffect(() => {
@@ -377,7 +399,20 @@ const CheckoutPage = () => {
 
       const finalBillingAddress = isBillingSameAsShipping ? shippingInfo : billingInfo;
 
+      // --- SILENTLY EXTRACT THE UUID ---
+      let userUUID = null;
+      try {
+        const freshData = localStorage.getItem("currentUser");
+        if (freshData) {
+          const parsedData = JSON.parse(freshData);
+          userUUID = parsedData.id || parsedData.user_id || null;
+        }
+      } catch (e) {
+        console.error("Parse error", e);
+      }
+
       const { data: newOrderId, error: rpcError } = await supabase.rpc('place_order', {
+        p_user_id: userUUID, 
         p_total_amount: total,
         p_status: 'Pending WhatsApp',
         p_customer_phone: `+91${contactInfo.phone}`,
@@ -408,7 +443,7 @@ const CheckoutPage = () => {
 
       analytics.trackWhatsAppOrder(newOrderId, total);
 
-      // 🚀 THE SILENT CLEANUP FIX (Updated to use directPurchaseData)
+      //  THE SILENT CLEANUP FIX (Updated to use directPurchaseData)
       if (directPurchaseData) {
         const itemWasInCart = cartItems.find((item: any) => item.id === directPurchaseData.id);
         if (itemWasInCart) {
@@ -655,12 +690,12 @@ Please let me know how to proceed with the payment. Thank you!`;
                           </div>
                         </div>
                         <div className="relative">
-                          <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Flat No, House, Building *</label>
-                          <input required type="text" value={shippingInfo.flat} onChange={(e) => setShippingInfo({...shippingInfo, flat: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                            <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Flat No, House, Building *</label>
+                            <input required type="text" value={shippingInfo.flat} onChange={(e) => setShippingInfo({...shippingInfo, flat: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
                         </div>
                         <div className="relative">
-                          <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Street, Area, Colony *</label>
-                          <input required type="text" value={shippingInfo.street} onChange={(e) => setShippingInfo({...shippingInfo, street: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
+                            <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Street, Area, Colony *</label>
+                            <input required type="text" value={shippingInfo.street} onChange={(e) => setShippingInfo({...shippingInfo, street: e.target.value})} className="w-full border-b border-gray-300 py-2 text-sm outline-none focus:border-rose-500 bg-transparent" />
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                           <div className="relative">

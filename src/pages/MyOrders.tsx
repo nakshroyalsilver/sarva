@@ -59,15 +59,24 @@ const MyOrders = () => {
       navigate("/login");
       return;
     }
-    setUser(JSON.parse(storedUser));
+    try {
+      setUser(JSON.parse(storedUser));
+    } catch (e) {
+      console.error("Corrupted user profile, clearing memory.");
+      localStorage.removeItem("currentUser");
+      navigate("/login");
+    }
   }, [navigate]);
 
-  // --- 1. MAIN ORDERS QUERY ---
+  // --- 1. MAIN ORDERS QUERY (HYBRID UUID FETCH) ---
   const { data: orders = [], isLoading: loadingOrders } = useQuery({
-    queryKey: ['myOrders', user?.email], 
+    // Cache using the permanent ID first, fallback to email
+    queryKey: ['myOrders', user?.id || user?.user_id || user?.email], 
     queryFn: async () => {
       const cleanEmail = user?.email?.trim();
-      const { data, error } = await supabase
+      const userUUID = user?.id || user?.user_id;
+
+      let query = supabase
         .from("orders")
         .select(`
           *,
@@ -76,13 +85,21 @@ const MyOrders = () => {
             products:product_id ( title, image_url, image_urls )
           )
         `)
-        .ilike("customer_email", cleanEmail) 
         .order("created_at", { ascending: false });
 
+      // THE HYBRID FETCH: Searches for the permanent UUID first, 
+      // but also catches your old email-only test orders!
+      if (userUUID) {
+        query = query.or(`user_id.eq.${userUUID},customer_email.ilike.${cleanEmail}`);
+      } else {
+        query = query.ilike("customer_email", cleanEmail);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.email, 
+    enabled: !!user, 
     staleTime: 1000 * 60 * 5, 
   });
 
@@ -131,7 +148,7 @@ const MyOrders = () => {
 
       // 2. Update the UI
       setSelectedOrder({ ...selectedOrder, status: 'Cancelled' });
-      await queryClient.invalidateQueries({ queryKey: ['myOrders', user?.email] });
+      await queryClient.invalidateQueries({ queryKey: ['myOrders'] });
       setCancelConfirmationOpen(false);
       
     } catch (error) {
@@ -154,7 +171,8 @@ const MyOrders = () => {
         setSelectedOrder({ ...selectedOrder, status: 'Return Requested' });
       }
       
-      await queryClient.invalidateQueries({ queryKey: ['myOrders', user?.email] });
+      // FIX: Invalidate the general 'myOrders' key so it auto-refreshes instantly!
+      await queryClient.invalidateQueries({ queryKey: ['myOrders'] });
       alert("Return request submitted successfully. Our team will contact you shortly.");
     } catch (error) {
       console.error("Error requesting return:", error);
@@ -181,8 +199,8 @@ const MyOrders = () => {
       if (error) throw error;
       alert("Thank you for your review!");
       
-      // Instantly update the reviewed products list using email key
-      await queryClient.invalidateQueries({ queryKey: ['reviewedProducts', user?.email] }); 
+      // Instantly update the reviewed products list 
+      await queryClient.invalidateQueries({ queryKey: ['myOrders'] });
       
       setReviewModalOpen(false);
       setReviewText("");

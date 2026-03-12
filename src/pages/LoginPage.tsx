@@ -92,6 +92,7 @@ const LoginPage = () => {
       const realName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
       
       const userData = { 
+        id: user?.id, // 🚀 CAPTURE UUID HERE
         name: realName, 
         email: user?.email 
       };
@@ -223,7 +224,8 @@ const LoginPage = () => {
           return; 
         }
 
-        const userData = { email: formData.email, name: formData.name, gender: formData.gender };
+        // 🚀 CAPTURE UUID HERE
+        const userData = { id: authData.user?.id, email: formData.email, name: formData.name, gender: formData.gender };
         
         const { error: insertError } = await supabase.from('customers').insert([userData]);
         if (insertError) console.error("Profile creation sync warning:", insertError);
@@ -254,8 +256,8 @@ const LoginPage = () => {
            supabase.auth.updateUser({ data: { full_name: realName } }).catch(() => {});
         }
 
-        // 5. Save the final, correct data
-        const finalUserData = { email: formData.email, name: realName, ...(customerData || {}) };
+        // 5. Save the final, correct data including UUID 🚀
+        const finalUserData = { id: authData.user?.id, email: formData.email, name: realName, ...(customerData || {}) };
         localStorage.setItem("currentUser", JSON.stringify(finalUserData));
         localStorage.setItem("isLoggedIn", "true");
         

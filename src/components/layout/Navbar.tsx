@@ -142,29 +142,36 @@ const Navbar = () => {
   }, []);
 
  useEffect(() => {
-  const storedUser = localStorage.getItem("currentUser");
-  if (storedUser) setUser(JSON.parse(storedUser));
+    const storedUser = localStorage.getItem("currentUser");
+    if (storedUser) setUser(JSON.parse(storedUser));
 
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-    const isRecovering = window.location.hash.includes("type=recovery") || 
-                         window.location.search.includes("reset=true");
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const isRecovering = window.location.hash.includes("type=recovery") || 
+                           window.location.search.includes("reset=true");
 
-    if (event === 'SIGNED_IN' && session?.user) {
-      if (isRecovering) return; 
+      if (event === 'SIGNED_IN' && session?.user) {
+        if (isRecovering) return; 
 
-      const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
-      const userData = { name: userName, email: session.user.email };
-      setUser(userData);
-      localStorage.setItem("currentUser", JSON.stringify(userData));
-      localStorage.setItem("isLoggedIn", "true");
-    } else if (event === 'SIGNED_OUT') {
-      setUser(null);
-      localStorage.removeItem("currentUser");
-      localStorage.removeItem("isLoggedIn");
-    }
-  });
-  return () => subscription.unsubscribe();
-}, []);
+        const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
+        
+        // 🚀 THE FIX: Added 'id: session.user.id' so Navbar doesn't erase it!
+        const userData = { 
+          id: session.user.id, 
+          name: userName, 
+          email: session.user.email 
+        };
+        
+        setUser(userData);
+        localStorage.setItem("currentUser", JSON.stringify(userData));
+        localStorage.setItem("isLoggedIn", "true");
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        localStorage.removeItem("currentUser");
+        localStorage.removeItem("isLoggedIn");
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   const handleLogout = async () => {
     localStorage.removeItem("currentUser");
