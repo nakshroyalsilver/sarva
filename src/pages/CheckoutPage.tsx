@@ -414,7 +414,7 @@ const CheckoutPage = () => {
       const { data: newOrderId, error: rpcError } = await supabase.rpc('place_order', {
         p_user_id: userUUID, 
         p_total_amount: total,
-        p_status: 'Pending WhatsApp',
+        p_status: paymentMethod === 'online' ? 'Pending Payment' : 'Pending WhatsApp',
         p_customer_phone: `+91${contactInfo.phone}`,
         p_customer_email: contactInfo.email,
         p_shipping_address: shippingInfo,
@@ -511,52 +511,55 @@ const CheckoutPage = () => {
         console.error("Failed to send email confirmation:", emailError);
       }
 
-      // --- GENERATE CLEAN WHATSAPP MESSAGE ---
-      const whatsappItemList = checkoutItems.map((item: any, index: number) => {
-        const productName = item.title || item.name || "Premium Jewelry Piece";
-        const sizeInfo = item.size ? ` (Size: ${item.size})` : "";
-        return `${index + 1}. *${productName}*${sizeInfo}\n   Qty: ${item.qty} × Rs.${item.price.toLocaleString()} = Rs.${(item.price * item.qty).toLocaleString()}`;
-      }).join('\n\n');
+      // --- DYNAMIC PAYMENT ROUTING (WHATSAPP vs UPI) ---
+      if (paymentMethod === 'online') {
+        
+       // 1. Call our new Supabase Edge Function!
+        const { data: phonePeResponse, error: functionError } = await supabase.functions.invoke('create-phonepe-order', {
+          body: {
+            orderId: newOrderId.replace(/-/g, ''),
+            amount: total,
+            userId: userUUID ? userUUID.replace(/-/g, '') : 'GUEST', // FIX: Strips dashes to meet PhonePe's 35-char limit!
+            redirectUrl: `${window.location.origin}/my-orders`, 
+            mobileNumber: contactInfo.phone
+          }
+        });
 
-      const businessWhatsApp = import.meta.env.VITE_BUSINESS_WHATSAPP;
-      const giftSection = showGiftMessage && giftMessage ? `*GIFT MESSAGE:*\n"${giftMessage}"\n\n` : "";
-      
-      const whatsappCouponLine = appliedCoupon ? `*Coupon (${appliedCoupon.code}):* -Rs.${couponDiscountAmount.toLocaleString()}\n` : "";
+        if (functionError) throw functionError;
 
-      const rawMessage = `*New Order Request*
+        // 2. The Magic Redirect!
+        if (phonePeResponse && phonePeResponse.success) {
+          const redirectLink = phonePeResponse.data.instrumentResponse.redirectInfo.url;
+          window.location.href = redirectLink; 
+          return; 
+        } else {
+          // THIS WILL NOW TELL US EXACTLY WHAT PHONEPE IS COMPLAINING ABOUT!
+          console.error("PhonePe API Rejected:", phonePeResponse);
+          throw new Error(`PhonePe Error: ${phonePeResponse?.message || "Invalid request to payment gateway."}`);
+        }
 
-Hello Sarvaa Fine Jewelry,
-I would like to place an order. Here are my details:
+        
 
-*ORDER ID:* #${shortOrderId}
-----------------------------
-*ORDER SUMMARY:*
+      } else {
 
-${whatsappItemList}
+        // --- GENERATE CLEAN WHATSAPP MESSAGE ---
+        const whatsappItemList = checkoutItems.map((item: any, index: number) => {
+          const productName = item.title || item.name || "Premium Jewelry Piece";
+          const sizeInfo = item.size ? ` (Size: ${item.size})` : "";
+          return `${index + 1}. *${productName}*${sizeInfo}\n   Qty: ${item.qty} × Rs.${item.price.toLocaleString()} = Rs.${(item.price * item.qty).toLocaleString()}`;
+        }).join('\n\n');
 
-----------------------------
-*Subtotal:* Rs.${subtotal.toLocaleString()}
-${whatsappCouponLine}*Shipping:* ${shipping === 0 ? "FREE" : `Rs.${shipping}`}
-*Grand Total:* *Rs.${total.toLocaleString()}*
-----------------------------
+        const businessWhatsApp = import.meta.env.VITE_BUSINESS_WHATSAPP;
+        const giftSection = showGiftMessage && giftMessage ? `*GIFT MESSAGE:*\n"${giftMessage}"\n\n` : "";
+        
+        const whatsappCouponLine = appliedCoupon ? `*Coupon (${appliedCoupon.code}):* -Rs.${couponDiscountAmount.toLocaleString()}\n` : "";
 
-${giftSection}*CUSTOMER DETAILS:*
-*Name:* ${shippingInfo.firstName} ${shippingInfo.lastName}
-*Phone:* +91 ${contactInfo.phone}
+        const rawMessage = `*New Order Request*\n\nHello Sarvaa Fine Jewelry,\nI would like to place an order. Here are my details:\n\n*ORDER ID:* #${shortOrderId}\n----------------------------\n*ORDER SUMMARY:*\n\n${whatsappItemList}\n\n----------------------------\n*Subtotal:* Rs.${subtotal.toLocaleString()}\n${whatsappCouponLine}*Shipping:* ${shipping === 0 ? "FREE" : `Rs.${shipping}`}\n*Grand Total:* *Rs.${total.toLocaleString()}*\n----------------------------\n\n${giftSection}*CUSTOMER DETAILS:*\n*Name:* ${shippingInfo.firstName} ${shippingInfo.lastName}\n*Phone:* +91 ${contactInfo.phone}\n\n*DELIVERY ADDRESS:*\n${shippingInfo.flat}, ${shippingInfo.street}\n${shippingInfo.city}, ${shippingInfo.state} - ${shippingInfo.pincode}\n\n*BILLING ADDRESS:*\n${isBillingSameAsShipping ? "Same as Delivery" : `${billingInfo.flat}, ${billingInfo.street}\n${billingInfo.city}, ${billingInfo.state} - ${billingInfo.pincode}`}\n\nPlease let me know how to proceed with the payment. Thank you!`;
 
-*DELIVERY ADDRESS:*
-${shippingInfo.flat}, ${shippingInfo.street}
-${shippingInfo.city}, ${shippingInfo.state} - ${shippingInfo.pincode}
-
-*BILLING ADDRESS:*
-${isBillingSameAsShipping ? "Same as Delivery" : `${billingInfo.flat}, ${billingInfo.street}\n${billingInfo.city}, ${billingInfo.state} - ${billingInfo.pincode}`}
-
-Please let me know how to proceed with the payment. Thank you!`;
-
-      const generatedLink = `https://wa.me/${businessWhatsApp}?text=${encodeURIComponent(rawMessage)}`;
-      setWhatsappLink(generatedLink);
-      
-      setOrderSuccess(true);
+        const generatedLink = `https://wa.me/${businessWhatsApp}?text=${encodeURIComponent(rawMessage)}`;
+        setWhatsappLink(generatedLink);
+        setOrderSuccess(true);
+      }
 
     } catch (error: any) {
       console.error("Order error:", error);
@@ -806,35 +809,41 @@ Please let me know how to proceed with the payment. Thank you!`;
                     <div className="p-6 pt-0 border-t border-gray-50">
                       <div className="space-y-4 mt-2">
                         
-                        <label className={`block border rounded-xl p-4 cursor-pointer transition-all border-green-600 bg-green-50/50 shadow-sm relative overflow-hidden`}>
-                          <div className="absolute top-0 right-0 bg-green-600 text-white text-[9px] font-bold px-2 py-1 uppercase tracking-widest rounded-bl-lg">Recommended</div>
+                        {/* WHATSAPP RADIO BUTTON */}
+                        <label onClick={() => setPaymentMethod('whatsapp')} className={`block border rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === 'whatsapp' ? 'border-green-600 bg-green-50/50 shadow-sm relative overflow-hidden' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                          {paymentMethod === 'whatsapp' && <div className="absolute top-0 right-0 bg-green-600 text-white text-[9px] font-bold px-2 py-1 uppercase tracking-widest rounded-bl-lg">Selected</div>}
                           <div className="flex items-start gap-3 pt-1">
-                            <input type="radio" checked readOnly className="mt-1 w-4 h-4 text-green-600 focus:ring-green-500 cursor-pointer" />
+                            <input type="radio" checked={paymentMethod === 'whatsapp'} readOnly className="mt-1 w-4 h-4 text-green-600 focus:ring-green-500 cursor-pointer" />
                             <div className="flex-1">
-                              <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                <MessageCircle size={18} className="text-green-600" fill="currentColor" fillOpacity={0.2} /> 
+                              <h3 className={`text-sm font-bold flex items-center gap-2 ${paymentMethod === 'whatsapp' ? 'text-gray-900' : 'text-gray-700'}`}>
+                                <MessageCircle size={18} className={paymentMethod === 'whatsapp' ? 'text-green-600' : 'text-gray-400'} fill="currentColor" fillOpacity={0.2} /> 
                                 Order via WhatsApp
                               </h3>
-                              <p className="text-xs text-gray-600 mt-1.5 leading-relaxed">
+                              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
                                 Send your order details directly to our team via WhatsApp to finalize payment securely.
                               </p>
                             </div>
                           </div>
                         </label>
 
-                        <label className={`block border rounded-xl p-4 cursor-not-allowed opacity-60 bg-gray-50 border-gray-200`}>
-                          <div className="flex items-start gap-3">
-                            <input type="radio" disabled className="mt-1 w-4 h-4 text-gray-400" />
+                        {/* UPI RADIO BUTTON */}
+                        <label onClick={() => setPaymentMethod('online')} className={`block border rounded-xl p-4 cursor-pointer transition-all ${paymentMethod === 'online' ? 'border-rose-600 bg-rose-50 shadow-sm relative overflow-hidden' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                          {paymentMethod === 'online' && <div className="absolute top-0 right-0 bg-rose-600 text-white text-[9px] font-bold px-2 py-1 uppercase tracking-widest rounded-bl-lg">Selected</div>}
+                          <div className="flex items-start gap-3 pt-1">
+                            <input type="radio" readOnly checked={paymentMethod === 'online'} className="mt-1 w-4 h-4 text-rose-600 focus:ring-rose-500 cursor-pointer" />
                             <div className="flex-1">
-                              <div className="flex items-center justify-between">
-                                <h3 className="text-sm font-bold text-gray-500 flex items-center gap-2"><CreditCard size={18} /> UPI / Cards / Wallets</h3>
-                                <span className="text-[9px] font-bold uppercase tracking-widest bg-gray-200 text-gray-600 px-2 py-1 rounded">Coming Soon</span>
-                              </div>
-                              <p className="text-xs text-gray-400 mt-1">Direct online payment gateway integration is currently in progress.</p>
+                              <h3 className={`text-sm font-bold flex items-center gap-2 ${paymentMethod === 'online' ? 'text-gray-900' : 'text-gray-700'}`}>
+                                <CreditCard size={18} className={paymentMethod === 'online' ? 'text-rose-600' : 'text-gray-400'} /> 
+                                UPI / Cards / Wallets
+                              </h3>
+                              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                                Pay securely via PhonePe using UPI, Credit/Debit cards, or Net Banking.
+                              </p>
                             </div>
                           </div>
                         </label>
 
+                        {/* COD RADIO BUTTON (DISABLED) */}
                         <label className={`block border rounded-xl p-4 cursor-not-allowed opacity-60 bg-gray-50 border-gray-200`}>
                           <div className="flex items-start gap-3">
                             <input type="radio" disabled className="mt-1 w-4 h-4 text-gray-400" />
@@ -850,8 +859,12 @@ Please let me know how to proceed with the payment. Thank you!`;
 
                       </div>
 
-                      <button onClick={handlePlaceOrder} disabled={isProcessing} className="w-full mt-8 bg-green-600 text-white py-4 rounded-lg font-bold uppercase tracking-widest text-sm hover:bg-green-700 transition-all shadow-lg shadow-green-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
-                        {isProcessing ? 'Processing Order...' : `Order via WhatsApp (₹${total.toLocaleString()})`}
+                      <button 
+                        onClick={handlePlaceOrder} 
+                        disabled={isProcessing} 
+                        className={`w-full mt-8 text-white py-4 rounded-lg font-bold uppercase tracking-widest text-sm transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 ${paymentMethod === 'online' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-200' : 'bg-green-600 hover:bg-green-700 shadow-green-200'}`}
+                      >
+                        {isProcessing ? 'Processing...' : paymentMethod === 'online' ? `Pay Securely (₹${total.toLocaleString()})` : `Order via WhatsApp (₹${total.toLocaleString()})`}
                       </button>
                     </div>
                   </motion.div>
@@ -1018,7 +1031,7 @@ Please let me know how to proceed with the payment. Thank you!`;
         )}
       </AnimatePresence>
 
-      {/* SUCCESS MODAL */}
+      {/* SUCCESS MODAL (Only shows if they select WhatsApp) */}
       <AnimatePresence>
         {orderSuccess && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">

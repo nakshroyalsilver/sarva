@@ -1,0 +1,12 @@
+# Supabase Local Development
+.supabase/
+supabase/.temp/
+supabase/functions/.import_map.json.tmp
+
+# Deno / Edge Functions
+.deno/
+deno.lock
+
+# OS Files
+.DS_Store
+Thumbs.db
