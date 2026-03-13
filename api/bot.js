@@ -1,12 +1,10 @@
 export default async function handler(req, res) {
-  // 1. BULLETPROOF SLUG EXTRACTION (Fixes the "undefined" bug)
+  // 1. BULLETPROOF SLUG EXTRACTION
   let slug = req.query.slug;
   if (!slug && req.url.includes('/product/')) {
-    // If Vercel stripped the query, manually pull it out of the raw URL
     slug = req.url.split('/product/')[1].split('?')[0];
   }
 
-  // If somehow it is still missing, abort before crashing
   if (!slug) {
     return res.status(400).send('No product slug provided');
   }
@@ -34,12 +32,10 @@ export default async function handler(req, res) {
     // 4. Safely grab and format the product image
     let rawImageUrl = product.images?.[0] || product.image || 'https://sarva-bin-landing.vercel.app/og-image.jpg';
     
-    // Ensure it is a full, absolute HTTPS link
     if (!rawImageUrl.startsWith('http')) {
       rawImageUrl = `https://${req.headers.host}${rawImageUrl.startsWith('/') ? '' : '/'}${rawImageUrl}`;
     }
 
-    // Encode spaces safely for WhatsApp
     let imageUrl;
     try {
       imageUrl = new URL(rawImageUrl).toString();
@@ -53,13 +49,13 @@ export default async function handler(req, res) {
     const description = product.short_description || product.description || `Discover the beautifully handcrafted ${productName} at Sarvaa.`;
     const url = `https://${req.headers.host}/product/${slug}`;
 
-    // 6. Build the bulletproof HTML card
+    // 6. Build the DEBUG HTML card
     const html = `
       <!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
-        <title>${title}</title>
+        <title>${title} (DEBUG)</title>
         
         <meta property="og:title" content="${title}">
         <meta property="og:description" content="${description}">
@@ -77,18 +73,26 @@ export default async function handler(req, res) {
         <meta name="twitter:description" content="${description}">
         <meta name="twitter:image" content="${imageUrl}">
       </head>
-      <body>
-        <script>window.location.replace("/product/${slug}");</script>
+      <body style="font-family: sans-serif; padding: 2rem;">
+        <h1>Bot Debug Mode</h1>
+        <div style="background: #f4f4f4; padding: 1rem; border-radius: 8px;">
+            <p><strong>Title:</strong> ${title}</p>
+            <p><strong>Description:</strong> ${description}</p>
+            <p><strong>Raw Image URL:</strong> <a href="${imageUrl}" target="_blank">${imageUrl}</a></p>
+        </div>
+        <br/>
+        <h3>Image Preview Test:</h3>
+        <img src="${imageUrl}" style="max-width: 300px; border: 3px solid red; min-height: 100px;" alt="If you see this text instead of the jewelry, the image link is broken!" />
       </body>
       </html>
     `;
 
-    // 7. Hand it to WhatsApp!
+    // 7. Send the debug page
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(html);
 
   } catch (error) {
     console.error("Bot API Error:", error);
-    res.status(500).send("Server Error");
+    res.status(500).send("Server Error: " + error.message);
   }
 }
