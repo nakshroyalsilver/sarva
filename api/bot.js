@@ -1,6 +1,15 @@
 export default async function handler(req, res) {
-  // 1. Grab the slug from the URL
-  const { slug } = req.query;
+  // 1. BULLETPROOF SLUG EXTRACTION (Fixes the "undefined" bug)
+  let slug = req.query.slug;
+  if (!slug && req.url.includes('/product/')) {
+    // If Vercel stripped the query, manually pull it out of the raw URL
+    slug = req.url.split('/product/')[1].split('?')[0];
+  }
+
+  // If somehow it is still missing, abort before crashing
+  if (!slug) {
+    return res.status(400).send('No product slug provided');
+  }
 
   // 2. Safely grab your Supabase environment variables from Vercel
   const supabaseUrl = process.env.VITE_SUPABASE_URL;
@@ -19,10 +28,10 @@ export default async function handler(req, res) {
     const product = data[0];
 
     if (!product) {
-      return res.status(404).send('Product not found');
+      return res.status(404).send('Product not found in database');
     }
 
-    // 4. Safely grab and format the product image for WhatsApp
+    // 4. Safely grab and format the product image
     let rawImageUrl = product.images?.[0] || product.image || 'https://sarva-bin-landing.vercel.app/og-image.jpg';
     
     // Ensure it is a full, absolute HTTPS link
@@ -30,12 +39,12 @@ export default async function handler(req, res) {
       rawImageUrl = `https://${req.headers.host}${rawImageUrl.startsWith('/') ? '' : '/'}${rawImageUrl}`;
     }
 
-    // Perfectly encode the URL (fixes spaces and special characters)
+    // Encode spaces safely for WhatsApp
     let imageUrl;
     try {
       imageUrl = new URL(rawImageUrl).toString();
     } catch (e) {
-      imageUrl = rawImageUrl; // Fallback if URL parsing fails
+      imageUrl = rawImageUrl; 
     }
 
     // 5. Format the Text
@@ -76,8 +85,6 @@ export default async function handler(req, res) {
 
     // 7. Hand it to WhatsApp!
     res.setHeader('Content-Type', 'text/html');
-    // Tell Vercel to cache this fast response for 24 hours to prevent WhatsApp timeouts
-    res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
     res.status(200).send(html);
 
   } catch (error) {
