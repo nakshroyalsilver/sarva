@@ -29,8 +29,8 @@ export default async function handler(req, res) {
       return res.status(404).send('Product not found in database');
     }
 
-    // 4. Safely grab and format the product image
-    let rawImageUrl = product.images?.[0] || product.image || 'https://sarva-bin-landing.vercel.app/og-image.jpg';
+    // 4. THE FIX: Grab the exact image_url column!
+    let rawImageUrl = product.image_url || product.images?.[0] || product.image || 'https://sarva-bin-landing.vercel.app/og-image.jpg';
     
     if (!rawImageUrl.startsWith('http')) {
       rawImageUrl = `https://${req.headers.host}${rawImageUrl.startsWith('/') ? '' : '/'}${rawImageUrl}`;
@@ -49,13 +49,13 @@ export default async function handler(req, res) {
     const description = product.short_description || product.description || `Discover the beautifully handcrafted ${productName} at Sarvaa.`;
     const url = `https://${req.headers.host}/product/${slug}`;
 
-    // 6. Build the DEBUG HTML card
+    // 6. Build the PRODUCTION HTML card
     const html = `
       <!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
-        <title>${title} (DEBUG)</title>
+        <title>${title}</title>
         
         <meta property="og:title" content="${title}">
         <meta property="og:description" content="${description}">
@@ -73,22 +73,15 @@ export default async function handler(req, res) {
         <meta name="twitter:description" content="${description}">
         <meta name="twitter:image" content="${imageUrl}">
       </head>
-      <body style="font-family: sans-serif; padding: 2rem;">
-        <h1>Bot Debug Mode</h1>
-        <div style="background: #f4f4f4; padding: 1rem; border-radius: 8px;">
-            <p><strong>Title:</strong> ${title}</p>
-            <p><strong>Description:</strong> ${description}</p>
-            <p><strong>Raw Image URL:</strong> <a href="${imageUrl}" target="_blank">${imageUrl}</a></p>
-        </div>
-        <br/>
-        <h3>Image Preview Test:</h3>
-        <img src="${imageUrl}" style="max-width: 300px; border: 3px solid red; min-height: 100px;" alt="If you see this text instead of the jewelry, the image link is broken!" />
+      <body>
+        <script>window.location.replace("/product/${slug}");</script>
       </body>
       </html>
     `;
 
-    // 7. Send the debug page
+    // 7. Hand it to WhatsApp!
     res.setHeader('Content-Type', 'text/html');
+    res.setHeader('Cache-Control', 's-maxage=86400, stale-while-revalidate');
     res.status(200).send(html);
 
   } catch (error) {
