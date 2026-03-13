@@ -9,7 +9,7 @@
           "value": ".*(WhatsApp|bot|facebookexternalhit|Twitterbot|LinkedInBot|TelegramBot|Slackbot).*"
         }
       ],
-      "destination": "/api/bot"
+      "destination": "/api/bot?slug=:slug" 
     },
     {
       "source": "/(.*)",

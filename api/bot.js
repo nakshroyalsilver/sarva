@@ -23,10 +23,13 @@ export default async function handler(req, res) {
       return res.status(404).send('Product not found');
     }
 
-    // 4. Safely grab the product image (Checking both 'images' array or 'image' string)
+    // 4. Safely grab the product image
     const imageUrl = product.images?.[0] || product.image || 'https://sarvaajewelry.com/og-image.jpg';
-    const title = `${product.name} | Sarvaa`;
-    const description = product.short_description || `Discover the beautifully handcrafted ${product.name}.`;
+    
+    // --- ✅ THE FIX: Look for 'title' first, then 'name' ---
+    const productName = product.title || product.name || 'Jewelry';
+    const title = `${productName} | Sarvaa`;
+    const description = product.short_description || product.description || `Discover the beautifully handcrafted ${productName}.`;
     const url = `https://${req.headers.host}/product/${slug}`;
 
     // 5. Build a custom, invisible HTML card specifically for the robot
