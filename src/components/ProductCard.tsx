@@ -101,7 +101,7 @@ const ProductCard = ({ product }: { product: any }) => {
 
   return (
     <>
-      <Link to={`/product/${product.id}`} className="block h-full">
+      <Link to={`/product/${product.slug}`} className="block h-full">
         <motion.div 
           className="group relative cursor-pointer h-full flex flex-col"
           initial={{ opacity: 0 }}

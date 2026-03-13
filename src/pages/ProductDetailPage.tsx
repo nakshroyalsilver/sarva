@@ -30,7 +30,7 @@ const quillStyles = `
 `;
 
 const ProductDetailPage = () => {
-  const { id } = useParams();
+ const { slug } = useParams();
   const navigate = useNavigate();
   const { addToCart, toggleWishlist, wishlistItems, cartItems } = useCart();
   
@@ -57,14 +57,14 @@ const ProductDetailPage = () => {
   const [justAddedItem, setJustAddedItem] = useState<any>(null);
 
   const { data: pageData, isLoading } = useQuery({
-    queryKey: ['product', id],
+    queryKey: ['product', slug],
     queryFn: async () => {
-      if (!id) throw new Error("Product ID is missing");
+      if (!slug) throw new Error("Product ID is missing");
       
       const { data: prodData, error: prodError } = await supabase
         .from('products')
         .select('*, categories(name, slug)')
-        .eq('id', id)
+        .eq('slug', slug) 
         .single();
         
       if (prodError || !prodData) throw new Error("Product not found");
@@ -77,8 +77,8 @@ const ProductDetailPage = () => {
           .from('products')
           .select('*, categories(name, slug)')
           .eq('category_id', prodData.category_id)
-          .neq('id', id)
-          .eq('is_archived', false) // 🚀 PREVENTS ARCHIVED ITEMS IN "YOU MAY ALSO LIKE"
+          .neq('id', prodData.id) 
+          .eq('is_archived', false)
           .limit(8);
           
         if (simData) {
@@ -88,7 +88,7 @@ const ProductDetailPage = () => {
 
       return { product: cleanProduct, similarProducts: cleanSimilar };
     },
-    enabled: !!id,
+    enabled: !!slug,
     staleTime: 1000 * 60 * 5,
   });
 
@@ -122,14 +122,14 @@ const ProductDetailPage = () => {
     setSelectedSize(null);
     setSizeError(false);
     setIsZooming(false); 
-  }, [id]);
+  }, [slug]);
 
   const isWishlisted = product ? wishlistItems.some((item) => item.id === product.id) : false;
 
   const images = product?.images || [];
   const currentStock = product?.stockQuantity || 0;
   
-  // 🚀 NEW: Check if archived, and treat archived items as permanently out-of-stock for safety
+  // NEW: Check if archived, and treat archived items as permanently out-of-stock for safety
   const isArchived = product?.is_archived === true;
   const isOutOfStock = product?.isOutOfStock || isArchived;
 
