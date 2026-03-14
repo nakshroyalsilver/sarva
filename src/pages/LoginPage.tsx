@@ -275,7 +275,7 @@ const LoginPage = () => {
   };
 
   return (
-    <GoogleOAuthProvider clientId="259277543007-5684nt6lidvamcipjdvr96qc0rsubjrc.apps.googleusercontent.com">
+   <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
       <div className="min-h-screen flex flex-col bg-white font-sans text-gray-900">
          <Helmet>
           <title>{isUpdatePassword ? "Create New Password" : isForgotPassword ? "Reset Password" : isSignUp ? "Sign Up" : "Login"} | Sarvaa Fine Jewelry</title>
