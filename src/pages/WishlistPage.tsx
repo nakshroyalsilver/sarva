@@ -5,27 +5,29 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/context/CartContext"; 
 import { Helmet } from "react-helmet-async";
-import { supabase } from "../../supabase"; // 🚀 ADDED: Supabase import for live status check
+import { supabase } from "../../supabase"; 
 
 const WishlistPage = () => {
-  // 1. Get Real Data from Global State
   const { wishlistItems, toggleWishlist, addToCart } = useCart();
 
-  // 🚀 NEW: Live status tracking for items sitting in the wishlist
   const [liveWishlistStatus, setLiveWishlistStatus] = useState<Record<string, any>>({});
+  const [isCheckingLive, setIsCheckingLive] = useState(true);
 
-  // 🚀 NEW: Live Stock & Archive Checker
   useEffect(() => {
     const checkLiveStatus = async () => {
       if (wishlistItems.length === 0) {
         setLiveWishlistStatus({});
+        setIsCheckingLive(false);
         return;
       }
       
+      setIsCheckingLive(true);
       const ids = wishlistItems.map((w: any) => w.id);
+      
+      // 🚀 FIX: Also fetching 'slug' just in case you use it, along with status
       const { data, error } = await supabase
         .from('products')
-        .select('id, is_archived, stock_quantity')
+        .select('id, slug, is_archived, stock_quantity')
         .in('id', ids);
 
       if (!error && data) {
@@ -35,12 +37,12 @@ const WishlistPage = () => {
         });
         setLiveWishlistStatus(statusMap);
       }
+      setIsCheckingLive(false);
     };
     
     checkLiveStatus();
   }, [wishlistItems]);
 
-  // 2. Helper to move item to cart and remove from wishlist
   const handleMoveToCart = (item: any) => {
     addToCart(item);
     toggleWishlist(item);
@@ -66,36 +68,49 @@ const WishlistPage = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 lg:gap-8">
             {wishlistItems.map((item: any) => {
               
-              // 🚀 LIVE STATUS CALCULATIONS
               const liveData = liveWishlistStatus[item.id];
+              const isDeleted = !isCheckingLive && !liveData; 
               const isArchived = liveData?.is_archived === true;
               const isOutOfStock = liveData && liveData.stock_quantity < 1;
-              const isUnavailable = isArchived || isOutOfStock;
+              const isUnavailable = isDeleted || isArchived || isOutOfStock;
+
+              // 🚀 THE FIX: Format the name just like we did in the Gifts section!
+              const productUrl = liveData?.slug 
+                ? `/product/${liveData.slug}` 
+                : `/product/${item.name.toLowerCase().replace(/\s+/g, '-')}`;
 
               return (
                 <div key={item.id} className={`group relative border rounded-lg overflow-hidden transition-shadow ${isUnavailable ? 'border-red-100 bg-red-50/20' : 'border-gray-100 hover:shadow-lg'}`}>
                   
-                  {/* Remove Button */}
                   <button 
                     onClick={() => toggleWishlist(item)}
-                    className="absolute top-3 right-3 p-2 bg-white/90 rounded-full text-gray-400 hover:text-red-500 z-20 transition-colors shadow-sm"
+                    className="absolute top-3 right-3 p-2 bg-white/90 rounded-full text-gray-400 hover:text-red-500 z-20 transition-colors shadow-sm cursor-pointer"
                     title="Remove from Wishlist"
                   >
                     <Trash2 size={16} />
                   </button>
 
-                  {/* Image */}
-                  <Link to={`/product/${item.id}`} className="block relative aspect-[3/4] bg-gray-50 overflow-hidden">
-                    <img 
-                      src={item.image} 
-                      alt={item.name} 
-                      className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${isUnavailable ? 'grayscale opacity-60' : ''}`}
-                    />
+                  <div className="block relative aspect-[3/4] bg-gray-50 overflow-hidden">
+                    {/* If deleted, remove the link so they don't get the "Not Found" error */}
+                    {isDeleted ? (
+                       <img src={item.image} alt="Product Removed" className="w-full h-full object-cover grayscale opacity-40" />
+                    ) : (
+                      <Link to={productUrl}>
+                        <img 
+                          src={item.image} 
+                          alt={item.name} 
+                          className={`w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 ${isUnavailable ? 'grayscale opacity-60' : ''}`}
+                        />
+                      </Link>
+                    )}
                     
-                    {/* 🚀 SMART BADGES */}
-                    {isArchived ? (
+                    {!isCheckingLive && isDeleted ? (
+                      <span className="absolute top-3 left-3 bg-red-100 border border-red-200 text-[10px] font-bold px-2 py-1 uppercase tracking-wider text-red-700 rounded-sm">
+                        No Longer Available
+                      </span>
+                    ) : isArchived ? (
                       <span className="absolute top-3 left-3 bg-red-50 border border-red-200 text-[10px] font-bold px-2 py-1 uppercase tracking-wider text-red-600 rounded-sm">
-                        Unavailable
+                        Archived
                       </span>
                     ) : isOutOfStock ? (
                       <span className="absolute top-3 left-3 bg-red-50 border border-red-200 text-[10px] font-bold px-2 py-1 uppercase tracking-wider text-red-600 rounded-sm">
@@ -106,25 +121,34 @@ const WishlistPage = () => {
                         {item.badge}
                       </span>
                     ) : null}
-                  </Link>
+                  </div>
 
-                  {/* Details */}
                   <div className="p-4 flex flex-col h-full">
-                    <h3 className={`font-medium text-sm mb-1 truncate ${isUnavailable ? 'text-gray-500' : 'text-gray-900'}`}>
-                      {item.name}
-                    </h3>
+                    {isDeleted ? (
+                      <h3 className="font-medium text-sm mb-1 truncate text-gray-500 line-through opacity-70">
+                        {item.name}
+                      </h3>
+                    ) : (
+                      <Link to={productUrl} className="font-medium text-sm mb-1 truncate text-gray-900 hover:text-rose-600 transition-colors">
+                        {item.name}
+                      </Link>
+                    )}
+
                     <div className="flex items-center gap-2 mb-4">
                       <span className={`font-bold text-sm ${isUnavailable ? 'text-gray-400' : 'text-gray-900'}`}>
-                        ₹{item.price.toLocaleString()}
+                        ₹{item.price?.toLocaleString() || '0'}
                       </span>
                       {item.originalPrice && !isUnavailable && (
                         <span className="text-gray-400 text-xs line-through">₹{item.originalPrice.toLocaleString()}</span>
                       )}
                     </div>
                     
-                    {/* 🚀 DYNAMIC BUTTON */}
                     <div className="mt-auto">
-                      {!isUnavailable ? (
+                      {isCheckingLive ? (
+                        <div className="w-full bg-gray-100 text-gray-400 text-xs font-bold uppercase py-3 rounded flex items-center justify-center animate-pulse">
+                          Checking...
+                        </div>
+                      ) : !isUnavailable ? (
                         <button 
                           onClick={() => handleMoveToCart(item)}
                           className="w-full bg-rose-600 text-white text-xs font-bold uppercase py-3 rounded hover:bg-rose-700 transition-colors flex items-center justify-center gap-2 shadow-sm shadow-rose-200 cursor-pointer"

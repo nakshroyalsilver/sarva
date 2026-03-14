@@ -27,7 +27,7 @@ const faqs = [
   },
   {
     question: "Do you offer gift wrapping options?",
-    answer: "Yes! You can select 'Make it a Gift' at checkout. We pack it in our premium signature box with a personalized message card for just ₹50 extra."
+    answer: "Yes! You can select 'Make it a Gift' at checkout. We pack it in our premium signature box with a personalized message card for free."
   }
 ];
 
