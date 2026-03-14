@@ -26,6 +26,7 @@ const PriceFilteredPage = () => {
         .from("products")
         .select("*")
         .lte("price", limit) // Less than or equal to the selected price
+        .eq("is_archived", false) // <--- THE FIX: Hides archived products!
         .order("price", { ascending: false }); // DESCENDING ORDER (Highest to lowest)
 
       if (error) throw error;
@@ -62,7 +63,6 @@ const PriceFilteredPage = () => {
           <h1 className="font-serif text-3xl md:text-4xl text-gray-900 mb-3">
             {displayTitle}
           </h1>
-         
         </div>
 
         {isLoading ? (

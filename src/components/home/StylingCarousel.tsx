@@ -17,21 +17,32 @@ const StylingCarousel = () => {
       try {
         const { data, error } = await supabase
           .from("products")
-          .select("*, categories(name)")
-          .eq("is_featured", true) // Only get products toggled ON in Admin
-          .eq("is_archived", false) // Ensures archived products NEVER show up here
+          .select(`
+            id,
+            title,
+            slug,
+            description,
+            image_url,
+            is_active,
+            categories ( name )
+          `)
+          // We use is_active to ensure we only show visible products
+          .eq("is_active", true) 
           .order("created_at", { ascending: false })
-          .limit(6); // Limit to top 6 to keep the carousel snappy
+          .limit(6);
 
         if (error) throw error;
 
         if (data && data.length > 0) {
-          const formatted = data.map(p => ({
+          const formatted = data.map((p: any) => ({
             id: p.id,
-            title: p.categories?.name ? p.categories.name : "Featured Style",
-            description: p.short_description || "Discover the craftsmanship of this featured piece.",
-            media: (p.image_urls && p.image_urls.length > 0) ? p.image_urls[0] : p.image_url,
-            productName: p.title,
+            slug: p.slug, // <-- We now grab the slug for the URL
+            // Big Heading: Shows the Category Name (e.g., "Necklaces")
+            categoryName: p.categories?.name || "Featured Style", 
+            description: p.description || "Discover the craftsmanship of this featured piece.",
+            media: p.image_url,
+            // Small Pill: Shows the actual Product Name (e.g., "Silver Lotus Ring")
+            productName: p.title, 
           }));
           setStylingContent(formatted);
         }
@@ -44,14 +55,14 @@ const StylingCarousel = () => {
     fetchFeatured();
   }, []);
 
-  // 2. Auto-scroll effect (only runs if we have content)
+  // 2. Auto-scroll effect
   useEffect(() => {
     if (stylingContent.length <= 1) return;
 
     const timer = setInterval(() => {
       setDirection(1);
       setCurrentIndex((prev) => (prev + 1) % stylingContent.length);
-    }, 5000); // Changed to 5 seconds to give users time to read
+    }, 5000);
 
     return () => clearInterval(timer);
   }, [stylingContent.length]);
@@ -96,8 +107,7 @@ const StylingCarousel = () => {
     });
   };
 
-  // Don't render if loading or no featured products exist
-  if (loading) return null; // Or you could put a skeleton loader here
+  if (loading) return null; 
   if (stylingContent.length === 0) return null;
 
   return (
@@ -112,10 +122,8 @@ const StylingCarousel = () => {
           </h2>
         </div>
 
-        {/* Carousel Container - Height slightly reduced */}
         <div className="relative h-[450px] md:h-[550px] flex items-center justify-center perspective-1000">
 
-          {/* Navigation Buttons (Hide if only 1 item) */}
           {stylingContent.length > 1 && (
             <>
               <button
@@ -136,7 +144,6 @@ const StylingCarousel = () => {
             </>
           )}
 
-          {/* Cards Stack */}
           <div className="relative w-full max-w-4xl h-full flex items-center justify-center">
             <AnimatePresence initial={false} custom={direction} mode="popLayout">
               <motion.div
@@ -163,38 +170,35 @@ const StylingCarousel = () => {
                     paginate(-1);
                   }
                 }}
-                // Reduced width from max-w-2xl to max-w-xl
                 className="absolute w-full max-w-xl cursor-grab active:cursor-grabbing px-4 md:px-0"
               >
-                {/* Main Card */}
                 <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-white border border-stone-200/50">
-                  {/* Reduced inner height from 400/500 to 350/450 */}
                   <div className="relative h-[350px] md:h-[450px]">
                     <img
                       src={stylingContent[currentIndex].media}
-                      alt={stylingContent[currentIndex].title}
+                      alt={stylingContent[currentIndex].productName}
                       className="w-full h-full object-cover bg-stone-100"
                     />
 
-                    {/* Gradient Overlay */}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
 
-                    {/* Content */}
                     <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8 text-white">
                       <h3 className="font-serif text-3xl md:text-4xl mb-2 capitalize">
-                        {stylingContent[currentIndex].title}
+                        {stylingContent[currentIndex].categoryName}
                       </h3>
                       <p className="text-sm md:text-base text-white/80 mb-6 max-w-md font-light line-clamp-2">
                         {stylingContent[currentIndex].description}
                       </p>
 
-                      {/* Dynamic Product Tag Link */}
-                      <Link to={`/product/${stylingContent[currentIndex].id}`} className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-full pr-6 pl-2 py-2 border border-white/20 hover:bg-white/20 transition-colors group">
+                      {/* We now use .slug in the URL instead of .id */}
+                      <Link to={`/product/${stylingContent[currentIndex].slug}`} className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-full pr-6 pl-2 py-2 border border-white/20 hover:bg-white/20 transition-colors group">
                         <div className="w-10 h-10 rounded-full bg-white/10 overflow-hidden border border-white/20 shrink-0">
                           <img src={stylingContent[currentIndex].media} className="w-full h-full object-cover" alt="thumbnail" />
                         </div>
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-wider line-clamp-1">{stylingContent[currentIndex].productName}</p>
+                          <p className="text-xs font-bold uppercase tracking-wider line-clamp-1 text-white">
+                            {stylingContent[currentIndex].productName}
+                          </p>
                           <p className="text-[10px] text-white/70 group-hover:text-white transition-colors flex items-center gap-1 mt-0.5 uppercase tracking-widest">
                             Shop Piece <ArrowRight size={10} className="group-hover:translate-x-1 transition-transform" />
                           </p>
@@ -202,14 +206,12 @@ const StylingCarousel = () => {
                       </Link>
                     </div>
 
-                    {/* Type Badge */}
                     <div className="absolute top-4 right-4 bg-black/30 backdrop-blur-md text-white px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-white/20">
                       FEATURED
                     </div>
                   </div>
                 </div>
 
-                {/* Background Cards (stacked effect) */}
                 <div className="absolute inset-0 -z-10 pointer-events-none">
                   <div className="absolute inset-0 bg-stone-200 rounded-2xl transform translate-x-4 translate-y-4 opacity-40"></div>
                   <div className="absolute inset-0 bg-stone-300 rounded-2xl transform translate-x-8 translate-y-8 opacity-20"></div>
@@ -218,7 +220,6 @@ const StylingCarousel = () => {
             </AnimatePresence>
           </div>
 
-          {/* Dots Indicator (Hide if only 1 item) */}
           {stylingContent.length > 1 && (
             <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex gap-2 z-20">
               {stylingContent.map((_, idx) => (

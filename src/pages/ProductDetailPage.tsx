@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag, PlayCircle, Bell, Info, CreditCard, Sparkles } from "lucide-react";
+import { Star, Heart, Truck, Check, Gift, Tag, ChevronRight, Minus, Plus, ShoppingBag, PlayCircle, Bell, Info, CreditCard, Sparkles,Share2, Copy } from "lucide-react";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { useCart } from "@/context/CartContext"; 
@@ -152,6 +152,29 @@ const ProductDetailPage = () => {
   const handlePincodeCheck = (e: React.FormEvent) => {
     e.preventDefault();
     if (pincode.length === 6) setIsPincodeChecked(true);
+  };
+  const handleShare = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const shareData = {
+      title: `${product?.name} | Sarvaa Fine Jewelry`,
+      text: product?.short_description || `Check out this beautiful ${product?.name}`,
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        // Use native mobile share sheet (WhatsApp, Instagram, etc)
+        await navigator.share(shareData);
+      } else {
+        // Fallback for Desktop: Copy link to clipboard
+        await navigator.clipboard.writeText(window.location.href);
+        triggerStockAlert("Link copied to clipboard!"); // Reusing your alert popup
+      }
+    } catch (err) {
+      console.log('Error sharing:', err);
+    }
   };
 
   const validateAndGetSize = () => {
@@ -352,12 +375,22 @@ const ProductDetailPage = () => {
                    />
                  )}
 
-                 <button 
-                   onClick={(e) => { e.stopPropagation(); toggleWishlist(product); }}
-                   className={`absolute top-4 right-4 p-2.5 bg-white/90 backdrop-blur rounded-full transition-colors shadow-sm z-10 cursor-pointer ${isZooming ? 'opacity-0' : 'opacity-100'} text-gray-500 hover:text-rose-600`}
-                 >
-                   <Heart size={18} className={isWishlisted ? "fill-rose-600 text-rose-600" : ""} />
-                 </button>
+                <div className={`absolute top-4 right-4 flex flex-col gap-2 z-10 transition-opacity duration-300 ${isZooming ? 'opacity-0' : 'opacity-100'}`}>
+                    <button
+                    onClick={(e) => { e.stopPropagation(); toggleWishlist(product); }}
+                    className="p-2.5 bg-white/90 backdrop-blur rounded-full shadow-sm text-gray-500 hover:text-rose-600 cursor-pointer transition-colors"
+                    aria-label="Add to wishlist"
+                  >
+                    <Heart size={18} className={isWishlisted ? "fill-rose-600 text-rose-600" : ""} />
+                  </button>
+                  <button
+                    onClick={handleShare}
+                    className="p-2.5 bg-white/90 backdrop-blur rounded-full shadow-sm text-gray-500 hover:text-gray-900 cursor-pointer transition-colors"
+                    aria-label="Share product"
+                  >
+                    <Share2 size={18} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex gap-2 overflow-x-auto lg:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none'] pb-2 lg:pb-0">
