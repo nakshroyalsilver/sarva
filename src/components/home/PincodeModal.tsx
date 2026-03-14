@@ -83,7 +83,7 @@ export default function PincodeModal() {
 
                 <div className="flex items-center gap-3 text-stone-400 px-1 pt-2">
                   <Truck size={16} />
-                  <span className="text-[11px] font-bold uppercase tracking-widest">Free Shipping on all orders</span>
+                  <span className="text-[11px] font-bold uppercase tracking-widest">Free Shipping on orders above 5000</span>
                 </div>
               </form>
             </div>
