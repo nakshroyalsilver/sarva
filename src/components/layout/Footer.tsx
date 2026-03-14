@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom"; // <-- Added useNavigate
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "../../../supabase"; 
 import { 
@@ -85,8 +85,25 @@ const Footer = () => {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
+  const [categories, setCategories] = useState<any[]>([]); // <-- Added state for dynamic categories
   
-  const navigate = useNavigate(); // <-- Added router hook for smart navigation
+  const navigate = useNavigate(); 
+
+  // --- NEW: Fetch Dynamic Categories on Load ---
+  useEffect(() => {
+    async function fetchCategories() {
+      const { data } = await supabase
+        .from('categories')
+        .select('name, slug')
+        .eq('is_visible', true) // Only fetch visible categories
+        .order('created_at', { ascending: true });
+      
+      if (data) {
+        setCategories(data);
+      }
+    }
+    fetchCategories();
+  }, []);
 
   // Support Links
   const supportLinks = [
@@ -94,10 +111,9 @@ const Footer = () => {
     { name: 'Shipping & Returns', path: '/shipping-returns' },
     { name: 'Terms of Service', path: '/terms-of-service' },
     { name: 'Privacy Policy', path: '/privacy-policy' },
-    { name: 'Track Order', path: '/track-order' } // We will intercept this one
+    { name: 'Track Order', path: '/track-order' }
   ];
 
-  // --- NEW: Smart Track Order Handler ---
   const handleTrackOrder = async (e: React.MouseEvent) => {
     e.preventDefault();
     try {
@@ -105,8 +121,8 @@ const Footer = () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // Logged in! Send them to their profile/orders page
-        navigate('/profile'); 
+        // Logged in! Send them directly to their orders page
+        navigate('/my-orders'); 
       } else {
         // Not logged in! Send them to the login page
         navigate('/login'); 
@@ -117,7 +133,6 @@ const Footer = () => {
     }
   };
 
-  // Newsletter Submission Function
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
@@ -218,17 +233,31 @@ const Footer = () => {
             </div>
           </div>
 
-          {/* Shop Column */}
+          {/* Shop Column - NOW DYNAMIC */}
           <div>
             <h4 className="font-bold text-gray-900 text-xs uppercase tracking-[0.15em] mb-6">Shop</h4>
             <ul className="space-y-3 text-sm text-gray-500">
-              {['Rings', 'Necklaces', 'Earrings', 'Bracelets', 'New Arrivals', 'Gifting'].map((item) => (
-                <li key={item}>
-                  <Link to={`/category/${item.toLowerCase().replace(' ', '-')}`} className="hover:text-rose-600 hover:pl-2 transition-all block">
-                    {item}
+              
+              {/* Dynamic Categories from Supabase */}
+              {categories.map((item) => (
+                <li key={item.slug}>
+                  <Link to={`/category/${item.slug}`} className="hover:text-rose-600 hover:pl-2 transition-all block capitalize">
+                    {item.name}
                   </Link>
                 </li>
               ))}
+
+              {/* Static Links */}
+              <li>
+                <Link to="category/new" className="hover:text-rose-600 hover:pl-2 transition-all block">
+                  New Arrivals
+                </Link>
+              </li>
+              <li>
+                <Link to="category/gifts" className="hover:text-rose-600 hover:pl-2 transition-all block">
+                  Gifting
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -238,7 +267,6 @@ const Footer = () => {
             <ul className="space-y-3 text-sm text-gray-500">
               {supportLinks.map((item) => (
                 <li key={item.name}>
-                  {/* --- NEW: Intercept 'Track Order' to run the auth check --- */}
                   {item.name === 'Track Order' ? (
                     <button 
                       onClick={handleTrackOrder} 
@@ -293,7 +321,7 @@ const Footer = () => {
             </div>
             
             <div className="mt-6 text-sm text-gray-500 space-y-2">
-              <p className="flex items-center gap-2"><Phone size={14} className="text-rose-600"/> +91 98765 43210</p>
+              <p className="flex items-center gap-2"><Phone size={14} className="text-rose-600"/> +91 87807 91994</p>
               <p className="flex items-center gap-2"><Mail size={14} className="text-rose-600"/> nakshroyalsilver@gmail.com</p>
             </div>
           </div>
@@ -307,13 +335,6 @@ const Footer = () => {
           <p className="text-[11px] text-gray-400 font-medium">
             © 2026 Sarvaa Jewelry. Designed with <span className="text-rose-500">♥</span> in India.
           </p>
-          
-          <div className="flex gap-4 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
-            <img src="https://cdn-icons-png.flaticon.com/512/196/196578.png" alt="Visa" className="h-5" />
-            <img src="https://cdn-icons-png.flaticon.com/512/196/196566.png" alt="Mastercard" className="h-5" />
-            <img src="https://cdn-icons-png.flaticon.com/512/196/196565.png" alt="PayPal" className="h-5" />
-            <img src="https://cdn-icons-png.flaticon.com/512/5968/5968269.png" alt="UPI" className="h-5" />
-          </div>
         </div>
       </div>
     </footer>
